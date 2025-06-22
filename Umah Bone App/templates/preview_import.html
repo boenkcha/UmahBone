@@ -1,0 +1,47 @@
+<h4>Preview Data Import</h4>
+{% if bahan_tidak_ditemukan %}
+<div class="alert alert-warning">
+    <strong>Beberapa bahan belum tersedia di database:</strong>
+    <ul>
+        {% for bahan in bahan_tidak_ditemukan %}
+        <li>{{ bahan }}</li>
+        {% endfor %}
+    </ul>
+    <p>Silakan tambahkan bahan terlebih dahulu sebelum melakukan import.</p>
+</div>
+{% endif %}
+
+<table class="table table-bordered">
+    <thead class="table-light">
+        <tr>
+            <th>Menu</th>
+            <th>Harga</th>
+            <th>Porsi</th>
+            <th>Bahan</th>
+            <th>Qty</th>
+            <th>Satuan Pakai</th>
+            <th>Status Bahan</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in data %}
+        <tr>
+            <td>{{ row.nm_menu }}</td>
+            <td>{{ row.harga }}</td>
+            <td>{{ row.porsi }}</td>
+            <td>{{ row.nm_bahan }}</td>
+            <td>{{ row.qty }}</td>
+            <td>{{ row.satuan_pakai }}</td>
+            <td>
+                {% if row.bahan_tersedia %}
+                <span class="badge bg-success">Tersedia</span>
+                {% else %}
+                <span class="badge bg-danger">Tidak Ada</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<a href="{{ url_for('index') }}" class="btn btn-secondary">Kembali</a>

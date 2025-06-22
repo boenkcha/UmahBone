@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Resep Menu</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+
+</head>
+<body class="bg-light">
+<div class="container mt-5">
+    <h2 class="mb-4">🧾 Form Resep Menu</h2>
+
+    <div class="mb-4">
+        <a href="/" class="btn btn-secondary">← Kembali ke Beranda</a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="mb-3">
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+<form action="" method="POST" class="mt-4">
+    <input type="hidden" name="nm_menu" value="{{ nama_menu }}">
+    
+    <!-- Hidden input untuk satuan_stok supaya bisa dikirim ke server -->
+    <input type="hidden" name="satuan_stok" id="satuan_stok_hidden" value="">
+
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <label class="form-label">Menu</label>
+            <input type="text" class="form-control" value="{{ nama_menu }}" readonly>
+            <input type="hidden" name="nm_menu" value="{{ nama_menu }}">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Jumlah Porsi</label>
+            <input type="number" name="porsi" class="form-control" value="{{ porsi or '' }}" min="1" required>
+        </div>
+    </div>
+
+
+    <div class="row">
+        <div class="col-md-3">
+            <label class="form-label">Bahan</label>
+            <select id="nm_bahan" name="nm_bahan" class="form-select" required onchange="tampilkanSatuan()">
+                {% for bahan in semua_bahan %}
+                <option value="{{ bahan[0] }}" data-satuan="{{ bahan[1] }}">{{ bahan[0] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label">Satuan Stok</label>
+            <div class="form-control" id="satuan-stok-label">-</div>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label">Jumlah</label>
+            <input type="number" step="any" name="qty" class="form-control" required>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label">Satuan Pakai</label>
+            <input type="text" name="satuan_pakai" class="form-control" placeholder="mis: butir" required>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label">Konversi ke Stok
+                <i class="bi bi-info-circle text-info" data-bs-toggle="tooltip" data-bs-placement="top"
+                title="Berapa satuan stok (asli) yang dibutuhkan per 1 satuan pakai. Contoh: 1 butir telur = 0.05 kg. Maka isi: 0.05">
+                </i>
+            </label>
+            <input type="number" step="any" name="konversi" class="form-control" placeholder="mis: 0.05" required>
+        </div>
+
+        <div class="col-md-1 d-flex align-items-end">
+            <button type="submit" class="btn btn-success w-100">➕</button>
+        </div>
+    </div>
+</form>
+
+<hr class="my-4">
+
+    <h4 class="mb-3">
+        📋 Daftar Resep untuk Menu: {{ nama_menu }}
+        <small class="text-muted">(Jumlah Porsi: {{ porsi or 0 }})</small>
+    </h4>
+
+    {% if resep %}
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Bahan</th>
+                <th>Jumlah</th>
+                <th>Satuan Pakai</th>
+                <th>Konversi ke Satuan Stok</th>
+                <th>Satuan Stok</th>
+                <th>Aksi</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in resep %}
+            {% set bahan_ditemukan = r[0] in semua_bahan | map(attribute=0) | list %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td class="{% if not bahan_ditemukan %}text-danger fw-bold{% endif %}" 
+                    title="{% if not bahan_ditemukan %}Bahan ini tidak tersedia di stok{% endif %}">
+                    {{ r[0] }}
+                </td>
+                <td>{{ r[1] }}</td>
+                <td>{{ r[2] }}</td>
+                <td>{{ r[3] }}</td>
+                <td>{{ r[4] }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('hapus_bahan_resep') }}" onsubmit="return confirm('Yakin ingin menghapus bahan ini dari resep?')">
+                        <input type="hidden" name="nm_menu" value="{{ nama_menu }}">
+                        <input type="hidden" name="nm_bahan" value="{{ r[0] }}">
+                        <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted">Belum ada bahan dalam resep ini.</p>
+    {% endif %}
+
+
+<script>
+    function tampilkanSatuan() {
+        const select = document.getElementById("nm_bahan");
+        const satuan = select.options[select.selectedIndex].getAttribute("data-satuan") || "-";
+        document.getElementById("satuan-stok-label").textContent = satuan;
+        document.getElementById("satuan_stok_hidden").value = satuan;  // **update hidden input**
+        autoIsiKonversi(); // Jika ada fungsi auto isi konversi
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        tampilkanSatuan();
+
+        // Tooltip bootstrap (jika ada)
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // Event listener untuk satuan pakai dan bahan
+        const satuanInput = document.getElementsByName("satuan_pakai")[0];
+        satuanInput.addEventListener("input", autoIsiKonversi);
+
+        const bahanSelect = document.getElementById("nm_bahan");
+        bahanSelect.addEventListener("change", tampilkanSatuan);
+    });
+</script>
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Restoran - Home</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        a.btn:hover {
+            transform: scale(1.02);
+            transition: 0.2s ease;
+        }
+        .card {
+            border-radius: 1rem;
+        }
+       
+        .nav-pills .nav-link {
+            background-color: #e0d4f7;
+            color: #5e2ca5;
+            font-weight: 500;
+            margin: 0 4px;
+        }
+
+        .nav-pills .nav-link.active,
+        .nav-pills .nav-link:hover {
+            background-color: #5e2ca5;
+            color: white;
+        }
+
+    </style>
+</head>
+<body class="bg-light">
+<div class="container py-5">
+
+    <!-- Navigation -->
+    <ul class="nav nav-pills justify-content-center mb-5">
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('pembelian') }}"><i class="bi bi-box-seam"></i> Pembelian</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('cari_pembelian') }}"><i class="bi bi-box-seam"></i> Cari Pembelian</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('transaksi') }}"><i class="bi bi-cash"></i> Penjualan</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('cari_transaksi') }}"><i class="bi bi-search"></i> Cari Penjualan</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('stok') }}"><i class="bi bi-clipboard-check"></i> Cek Stok</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('laporan_kartu_stok') }}"><i class="bi bi-journal-text"></i> Kartu Stok</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('laporan_kebutuhan') }}"><i class="bi bi-journal-text"></i> Laporan Kebutuhan</a></li>
+    </ul>
+
+    <h1 class="mb-4 text-center">🍽️ <strong>Aplikasi Restoran Ver.1.01NA</strong></h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="mb-3">
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <div class="row">
+        <!-- Tambah Menu -->
+        <div class="col-md-6">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-card-list"></i> Tambah Menu</h5>
+                    <!-- Tombol Modal -->
+                    
+                </div>
+
+                <div class="card-body">
+                    <!-- Form Preview -->
+                    <form action="{{ url_for('preview_import') }}" method="POST" enctype="multipart/form-data" class="mb-4">
+                        <div class="d-flex gap-2">
+                            <input type="file" name="file" class="form-control" accept=".csv" required>
+                            <button type="submit" class="btn btn-primary">Preview</button>
+                        </div>
+                        <small class="text-muted d-block mt-2">Format: nm_menu, harga, porsi, nm_bahan, qty, satuan_pakai</small>
+                    </form>
+
+                    <!-- Form Tambah Menu -->
+                    <form action="{{ url_for('tambah_menu') }}" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label">Nama Menu</label>
+                            <input type="text" name="nama" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Harga</label>
+                            <input type="number" name="harga" class="form-control" required>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-end">
+                            <button type="submit" class="btn btn-success"><i class="bi bi-plus-circle"></i> Tambah Menu</button>
+                            <a href="{{ url_for('kelola_paket') }}" class="btn btn-outline-primary"><i class="bi bi-box"></i> Kelola Paket</a>
+                        </div>
+                    </form>
+
+                    <!-- Daftar Menu -->
+                    <div class="card shadow-sm mt-5">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <span>Daftar Menu</span>
+                        <!-- Tombol Import -->
+                        <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#importModal">
+                            <i class="bi bi-upload"></i> Import Menu & Resep
+                        </button>
+
+                    </div>
+
+                        <div class="card-body">
+                            {% if daftar_menu %}
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Nama Menu</th>
+                                        <th>Harga</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for menu in daftar_menu %}
+                                    <tr>
+                                        <td>{{ menu[0] }}</td>
+                                        <td>Rp {{ "{:,}".format(menu[1]) }}</td>
+                                        <td>
+                                            <a href="{{ url_for('kelola_resep', nama_menu=menu[0]) }}" class="btn btn-sm btn-outline-primary">Kelola Resep</a>
+                                            <a href="{{ url_for('hapus_menu', nama_menu=menu[0]) }}" class="btn btn-sm btn-outline-danger ms-2" onclick="return confirm('Yakin ingin menghapus menu ini?')">Hapus</a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <p class="text-muted">Belum ada menu.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Tambah Bahan -->
+        <div class="col-md-6">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-success text-white"><i class="bi bi-archive"></i> Tambah Bahan</div>
+                <div class="card-body">
+                    <form action="{{ url_for('tambah_bahan') }}" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label">Nama Bahan</label>
+                            <input type="text" name="nama" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Satuan</label>
+                            <input type="text" name="satuan" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-success"><i class="bi bi-plus-circle"></i> Tambah Bahan</button>
+                    </form>
+
+                    <!-- Tabel Daftar Bahan -->
+                    <div class="card shadow-sm mt-4 mb-5">
+                        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                            <span>Daftar Bahan</span>
+                            <a href="{{ url_for('cek_list_bahan') }}" class="btn btn-sm btn-warning">
+                                <i class="bi bi-list-check"></i> Cek List Bahan
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            {% if daftar_bahan %}
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Nama Bahan</th>
+                                        <th>Satuan</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for bahan in daftar_bahan %}
+                                    <tr>
+                                        <td>{{ bahan[0] }}</td>
+                                        <td>{{ bahan[1] }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <p class="text-muted">Belum ada bahan.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-center mt-5 text-muted small border-top pt-3">
+        &copy; 2025 <strong>ᾰynnaa.zzng</strong> — Aplikasi Restoran Ver.1.01NNAA
+    </footer>
+</div>
+
+<!-- Modal Gabungan Import Menu & Resep -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <form action="{{ url_for('import_menu_resep_lengkap2') }}" method="POST" enctype="multipart/form-data" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="importModalLabel"><i class="bi bi-upload"></i> Import Menu & Resep (CSV)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Area Drag & Drop -->
+        <div id="dropArea" class="border border-2 border-primary rounded p-4 text-center bg-light mb-3" style="cursor: pointer;">
+          <i class="bi bi-cloud-arrow-up fs-1 text-primary"></i>
+          <p class="mb-0 text-muted">Klik atau seret file CSV ke sini</p>
+          <input type="file" name="file" id="csvFileInput" class="d-none" accept=".csv" required>
+        </div>
+
+        <!-- Preview Table -->
+        <div class="table-responsive" id="previewTable" style="display: none;">
+          <table class="table table-bordered table-sm">
+            <thead>
+              <tr>
+                <th>Nama Menu</th>
+                <th>Nama Bahan</th>
+                <th>Qty</th>
+                <th>Satuan Pakai</th>
+                <th>Konversi</th>
+                <th>Satuan Stok</th>
+                <th>Harga</th>
+                <th>Porsi</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <small class="text-muted d-block mt-2">
+          Format CSV: <code>nm_menu, nm_bahan, qty, satuan_pakai, konversi, satuan_stok, harga, porsi</code>
+        </small>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary" id="submitBtn" disabled>Upload</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Script Preview CSV -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const dropArea = document.getElementById('dropArea');
+  const fileInput = document.getElementById('csvFileInput');
+  const previewTable = document.getElementById('previewTable');
+  const previewBody = previewTable.querySelector('tbody');
+  const submitBtn = document.getElementById('submitBtn');
+
+  dropArea.addEventListener('click', () => fileInput.click());
+
+  ['dragenter', 'dragover'].forEach(event => {
+    dropArea.addEventListener(event, e => {
+      e.preventDefault();
+      dropArea.classList.add('bg-primary', 'text-white');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach(event => {
+    dropArea.addEventListener(event, e => {
+      e.preventDefault();
+      dropArea.classList.remove('bg-primary', 'text-white');
+    });
+  });
+
+  dropArea.addEventListener('drop', e => {
+    const file = e.dataTransfer.files[0];
+    if (file && file.type === "text/csv") {
+      fileInput.files = e.dataTransfer.files;
+      previewCSV(file);
+    }
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) {
+      previewCSV(fileInput.files[0]);
+    }
+  });
+
+  function previewCSV(file) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const rows = e.target.result.trim().split("\n");
+      previewBody.innerHTML = '';
+      rows.forEach((row, index) => {
+        const cols = row.split(",");
+        if (cols.length >= 8) {
+          const tr = `
+            <tr>
+              <td>${cols[0]}</td>
+              <td>${cols[1]}</td>
+              <td>${cols[2]}</td>
+              <td>${cols[3]}</td>
+              <td>${cols[4]}</td>
+              <td>${cols[5]}</td>
+              <td>${cols[6]}</td>
+              <td>${cols[7]}</td>
+            </tr>`;
+          previewBody.innerHTML += tr;
+        }
+      });
+      previewTable.style.display = 'block';
+      submitBtn.disabled = false;
+    };
+    reader.readAsText(file);
+  }
+});
+</script>
+
+
+
+</body>
+</html>
+

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Data Stok Bahan</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+    <style>
+        body {
+            background: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        h2 {
+            font-weight: 700;
+            color: #343a40;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .btn-secondary {
+            box-shadow: 0 3px 8px rgba(108,117,125,0.4);
+            transition: all 0.3s ease;
+        }
+        .btn-secondary:hover {
+            background-color: #495057;
+            box-shadow: 0 5px 15px rgba(73,80,87,0.6);
+            transform: translateY(-2px);
+        }
+        table {
+            background: #ffffff;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        thead.table-dark {
+            background: linear-gradient(45deg, #343a40, #212529);
+            color: #fff;
+            font-size: 0.95rem;
+        }
+        tbody tr:hover {
+            background-color: #f1f3f5;
+            transition: background-color 0.3s ease;
+        }
+        .btn-info {
+            background: #0dcaf0;
+            border: none;
+            box-shadow: 0 3px 8px rgba(13,202,240,0.5);
+            transition: all 0.3s ease;
+        }
+        .btn-info:hover {
+            background: #31d2f2;
+            box-shadow: 0 5px 20px rgba(49,210,242,0.7);
+            transform: translateY(-3px);
+        }
+        .pagination .page-link {
+            color: #0d6efd;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+        }
+        .pagination .page-item.active .page-link {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+            color: #fff;
+        }
+        .pagination .page-link:hover {
+            background-color: #cfe2ff;
+            color: #0d6efd;
+        }
+    </style>
+</head>
+<body class="container mt-5">
+
+    <h2 class="mb-4 text-center">Daftar Stok Bahan</h2>
+
+    <div class="mb-4 text-center">
+        <a href="/" class="btn btn-secondary px-4 py-2">
+            <i class="bi bi-arrow-left-circle-fill"></i> Kembali ke Beranda
+        </a>
+    </div>
+    
+    <form method="GET" action="/stok" class="row mb-4 justify-content-center">
+        <div class="col-md-6">
+            <div class="input-group">
+                <input type="text" name="q" value="{{ request.args.get('q', '') }}" class="form-control" placeholder="🔍 Cari nama bahan...">
+                <button class="btn btn-primary" type="submit">Cari</button>
+            </div>
+        </div>
+    </form>
+
+    <div class="table-responsive shadow-sm rounded">
+        <table class="table table-bordered table-striped align-middle mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>Nama Bahan</th>
+                    <th class="text-end">Jumlah</th>
+                    <th>Satuan</th>
+                    <th class="text-end">Harga Modal (Rp)</th>
+                    <th class="text-end">Total Nilai (Rp)</th>
+                    <th class="text-center">Aksi</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in stok_list %}
+                <tr {% if s[-1] %} class="table-danger" {% endif %}>
+                    <td>{{ s[0] }}</td>
+                    <td class="text-end">{{ "{:,.2f}".format(s[1] or 0) }}</td>
+                    <td>{{ s[2] }}</td>
+                    <td class="text-end">{{ "{:,.0f}".format(s[3] or 0) }}</td>
+                    <td class="text-end">{{ "{:,.0f}".format((s[1] or 0) * (s[3] or 0)) }}</td>
+                    <td class="text-center">
+                        <a class="btn btn-info btn-sm" href="{{ url_for('infostok', nm_bahan=s[0]) }}" title="Lihat Info Stok">
+                            <i class="bi bi-info-circle"></i> Info
+                        </a>
+                    </td>
+                    <td>
+                        {% if s[0] != s[0]|lower %}
+                            <span class="badge bg-warning text-dark">Alias</span>
+                        {% else %}
+                            <span class="badge bg-success">Standar</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+
+
+
+        </table>
+        <div class="mt-2 text-muted fst-italic">
+            <small><span class="bg-danger px-2 py-1 text-white rounded">Baris Merah:</span> Nama bahan sangat mirip dengan data lain (kemungkinan duplikat).</small>
+        </div>
+
+    </div>
+
+    <!-- Pagination -->
+    <nav aria-label="Page navigation" class="mt-4 d-flex justify-content-center">
+        <ul class="pagination pagination-lg">
+            <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                <a class="page-link" href="?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}" aria-label="Previous">
+                    <span aria-hidden="true">&laquo;</span>
+                </a>
+            </li>
+            {% for p in range(1, total_pages + 1) %}
+            <li class="page-item {% if p == page %}active{% endif %}">
+                <a class="page-link" href="?page={{ p }}{% if q %}&q={{ q }}{% endif %}">{{ p }}</a>
+            </li>
+            {% endfor %}
+            <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                <a class="page-link" href="?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}" aria-label="Next">
+                    <span aria-hidden="true">&raquo;</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
