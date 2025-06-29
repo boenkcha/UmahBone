@@ -111,7 +111,26 @@ class RestoDB:
                 satuan TEXT,
                 harga_modal REAL
             );
-                              
+
+            CREATE TABLE IF NOT EXISTS NeracaRugiLaba (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bulan TEXT NOT NULL,          -- Format: 'YYYY-MM'
+                pendapatan REAL DEFAULT 0,
+                hpp REAL DEFAULT 0,           -- Harga Pokok Penjualan
+                laba_kotor REAL DEFAULT 0,
+                biaya_operasional REAL DEFAULT 0,
+                laba_bersih REAL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+     
+            CREATE TABLE IF NOT EXISTS BiayaOperasional (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tanggal_pengeluaran TEXT NOT NULL,  -- Format: 'YYYY-MM-DD'
+                keterangan TEXT,
+                jumlah REAL DEFAULT 0
+            );
+
+       
         """)
         self.conn.commit()
 
@@ -159,9 +178,13 @@ class RestoDB:
 
     
 
-    def tambah_resep(self, nm_menu, nm_bahan, qty):
-        self.cursor.execute("INSERT INTO Resep (Nm_menu, Nm_bahan, Qty) VALUES (?, ?, ?)", (nm_menu, nm_bahan, qty))
+    def tambah_resep(self, nm_menu, nm_bahan, qty, satuan_pakai, konversi, satuan_stok):
+        self.cursor.execute("""
+            INSERT INTO Resep (Nm_menu, Nm_bahan, Qty, Satuan_pakai, Konversi, Satuan_stok)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (nm_menu, nm_bahan, qty, satuan_pakai, konversi, satuan_stok))
         self.conn.commit()
+
 
     def tambah_resep_lengkap(self, nm_menu, nm_bahan, qty, satuan_pakai, konversi, satuan_stok):
         self.cursor.execute(
@@ -189,14 +212,31 @@ class RestoDB:
     def close(self):
         self.conn.close()
 
-    
+    def cek_stok(self, nm_bahan):
+        result = self.cursor.execute("""
+            SELECT jumlah FROM Stok
+            WHERE LOWER(nm_bahan) = LOWER(?)
+            ORDER BY jumlah DESC LIMIT 1
+        """, (nm_bahan,)).fetchone()
+        
+        return result[0] if result else None
+
+    def ambil_stok_bahan_dan_satuan(self):
+        self.cursor.execute("SELECT nm_bahan, satuan FROM Stok")
+        return self.cursor.fetchall()
+
     def ambil_menu(self):
-        self.cursor.execute("SELECT * FROM Menu")
+        self.cursor.execute("SELECT * FROM Menu order by nm_menu")
         return self.cursor.fetchall()
 
     def ambil_bahan(self):
-        self.cursor.execute("SELECT * FROM Bahan order by nm_bahan COLLATE NOCASE ASC")
+        self.cursor.execute("""
+            SELECT * FROM Bahan 
+            ORDER BY nm_bahan COLLATE NOCASE ASC 
+            LIMIT 15
+        """)
         return self.cursor.fetchall()
+
 
     def ambil_semua_menu(self):
         self.cursor.execute("SELECT Nm_menu FROM Menu")
@@ -598,28 +638,35 @@ class RestoDB:
         self.conn.commit()
 
     def update_stok_setelah_pembelian(self, nm_bahan, jumlah_baru, satuan, harga_total_baru):
-        self.cursor.execute("SELECT jumlah, harga_modal FROM Stok WHERE nm_bahan = ?", (nm_bahan,))
+        # Validasi awal
+        if not nm_bahan or jumlah_baru <= 0 or harga_total_baru <= 0:
+            raise ValueError("Data pembelian tidak valid: pastikan nama bahan, jumlah, dan harga total > 0")
+
+        harga_per_unit_baru = harga_total_baru / jumlah_baru
+
+        # 🔎 Cari stok berdasarkan nama bahan DAN satuan
+        self.cursor.execute("""
+            SELECT jumlah, harga_modal FROM Stok
+            WHERE nm_bahan = ? AND satuan = ?
+        """, (nm_bahan, satuan))
         row = self.cursor.fetchone()
 
-        harga_per_unit_baru = harga_total_baru / jumlah_baru if jumlah_baru else 0
-
         if row:
+            # Jika stok dengan satuan ini sudah ada → update stok & harga rata-rata
             jumlah_lama, harga_modal_lama = row
             total_nilai_lama = jumlah_lama * harga_modal_lama
             total_nilai_baru = jumlah_baru * harga_per_unit_baru
             jumlah_total = jumlah_lama + jumlah_baru
 
-            if jumlah_total == 0:
-                harga_modal_baru = 0
-            else:
-                harga_modal_baru = (total_nilai_lama + total_nilai_baru) / jumlah_total
+            harga_modal_baru = (total_nilai_lama + total_nilai_baru) / jumlah_total if jumlah_total != 0 else 0
 
             self.cursor.execute("""
                 UPDATE Stok
-                SET jumlah = ?, satuan = ?, harga_modal = ?
-                WHERE nm_bahan = ?
-            """, (jumlah_total, satuan, harga_modal_baru, nm_bahan))
+                SET jumlah = ?, harga_modal = ?
+                WHERE nm_bahan = ? AND satuan = ?
+            """, (jumlah_total, harga_modal_baru, nm_bahan, satuan))
         else:
+            # Jika belum ada, tambahkan entri stok baru dengan satuan tsb
             harga_modal_baru = harga_per_unit_baru
             self.cursor.execute("""
                 INSERT INTO Stok (nm_bahan, jumlah, satuan, harga_modal)
@@ -627,6 +674,8 @@ class RestoDB:
             """, (nm_bahan, jumlah_baru, satuan, harga_modal_baru))
 
         self.conn.commit()
+
+
 
     def update_pembelian(self, no_nota, tanggal, nama_supplier, status_pembayaran):
         self.cursor.execute("""
@@ -643,45 +692,47 @@ class RestoDB:
     def import_pembelian_csv(self, file):
         text = file.stream.read().decode('utf-8')
         stream = io.StringIO(text)
-        inserted_nota = set()
         reader = csv.DictReader(stream)
+        inserted_nota = set()
 
         for row in reader:
-            tanggal = row['Tanggal']
-            no_nota = row['No_Nota']
-            supplier = row['nama_suplier']
-            status = row['status_pembayaran']
-            nm_bahan = row['Nm_Barang']
-            jumlah = float(row['Qty'])
-            satuan = row['Satuan']
-            harga = float(row['Harga_modal'])
+            try:
+                tanggal = row['Tanggal']
+                no_nota = row['No_Nota'].strip()
+                supplier = row['nama_suplier'].strip()
+                status = row['status_pembayaran'].strip()
 
-            # === 🔍 Cek alias bahan ===
-            cur = self.conn.cursor()
-            cur.execute("SELECT nama_standar FROM BahanAlias WHERE nama_lama = ?", (nm_bahan,))
-            alias_row = cur.fetchone()
-            if alias_row:
-                nm_bahan = alias_row[0]  # gunakan nama standar
+                # === 🧽 Normalisasi nama bahan ===
+                nm_bahan = ' '.join(row['Nm_Barang'].strip().upper().split())
+                jumlah = float(row['Qty'])
+                satuan = row['Satuan'].strip()
+                harga = float(row['Harga_modal'])
 
-            # === ✅ Cek dan simpan header pembelian ===
-            if no_nota not in inserted_nota:
-                existing = self.get_pembelian_by_nota(no_nota)
-                if existing:
-                    flash(f'No Nota {no_nota} sudah ada di database, data diabaikan', 'warning')
-                    continue
-                try:
+                # === 🔄 Cek alias bahan (disamakan juga dengan TRIM + UPPER)
+                cur = self.conn.cursor()
+                cur.execute("""
+                    SELECT nama_standar FROM BahanAlias
+                    WHERE UPPER(TRIM(nama_lama)) = ?
+                """, (nm_bahan,))
+                alias_row = cur.fetchone()
+                if alias_row:
+                    nm_bahan = alias_row[0]  # Gunakan nama standar
+
+                # === ✅ Simpan header pembelian jika belum pernah
+                if no_nota not in inserted_nota:
+                    existing = self.get_pembelian_by_nota(no_nota)
+                    if existing:
+                        flash(f'No Nota {no_nota} sudah ada di database, data diabaikan', 'warning')
+                        continue
                     self.insert_pembelian(no_nota, tanggal, supplier, status)
                     inserted_nota.add(no_nota)
-                except Exception as e:
-                    flash(f'Gagal simpan header pembelian No Nota {no_nota}: {str(e)}', 'danger')
-                    continue
 
-            try:
-                # === 🧾 Simpan detail & update stok ===
+                # === 🧾 Simpan detail pembelian & update stok
                 self.insert_pembelian_detail(no_nota, nm_bahan, jumlah, satuan, harga)
-                self.update_stok_setelah_pembelian(nm_bahan, jumlah, satuan, harga)
+                total_harga = jumlah * harga
+                self.update_stok_setelah_pembelian(nm_bahan, jumlah, satuan, total_harga)
 
-                # === 📦 Update ke tabel Bahan ===
+                # === 📦 Update atau tambah bahan
                 existing_bahan = self.get_bahan_by_nama(nm_bahan)
                 if existing_bahan:
                     self.update_harga_bahan(nm_bahan, harga)
@@ -689,10 +740,11 @@ class RestoDB:
                     self.tambah_bahan(nm_bahan, satuan, harga)
 
             except Exception as e:
-                flash(f'Gagal simpan detail pembelian No Nota {no_nota} bahan {nm_bahan}: {str(e)}', 'danger')
+                flash(f'Gagal proses baris: No Nota {row.get("No_Nota", "")}, Bahan {row.get("Nm_Barang", "")} — {str(e)}', 'danger')
                 continue
 
         flash('Proses import selesai.', 'success')
+
 
 
     def get_bahan_by_nama(self, nm_bahan):
@@ -786,7 +838,7 @@ class RestoDB:
         report_df.index.name = 'Bahan'
         return report_df.reset_index()
 
-    #mulai kolom multi
+    #UNTUK WARNA MASUK DAN KELUAR imi
 
     def render_html_kartu_stok(self, start=None, end=None):
         df = self.get_kartu_stok_formatted(start, end)
@@ -803,8 +855,14 @@ class RestoDB:
                 new_columns.append(("", col))
         df.columns = pd.MultiIndex.from_tuples(new_columns)
 
-        # Format dan highlight
-        def highlight(col):
+        # Format angka
+        fmt_dict = {
+            col: "{:.2f}" for col in df.columns
+            if col[1] not in ["Bahan", "Saldo"]
+        }
+
+        # Base highlight kolom (SA & M)
+        def highlight_column(col):
             if isinstance(col.name, tuple):
                 if col.name[1] == "SA":
                     return ["background-color: #d0e7ff"] * len(col)
@@ -812,29 +870,32 @@ class RestoDB:
                     return ["background-color: #d0ffd6"] * len(col)
             return [""] * len(col)
 
-        fmt_dict = {
-            col: "{:.2f}" for col in df.columns
-            if col[1] not in ["Bahan", "Saldo"]
-        }
+        # Tambahan gaya per sel (warna teks biru/ungu tebal)
+        def color_cells(val, col_label):
+            if col_label[1] == "M" and val != 0:
+                return "color: blue; font-weight: bold;"
+            elif col_label[1] == "K" and val != 0:
+                return "color: red; font-weight: bold;"
+            return ""
 
-      #  styled = df.style.apply(highlight, axis=0).format(fmt_dict)
-      #  return styled.to_html(index=False, escape=False)
+        # Bangun DataFrame CSS style per sel
+        styles = pd.DataFrame("", index=df.index, columns=df.columns)
+        for col in df.columns:
+            styles[col] = df[col].apply(lambda val: color_cells(val, col))
 
         styled = (
             df.style
-            .apply(highlight, axis=0)
-            .format(fmt_dict)
-            .set_table_styles(
-                [{
-                    'selector': 'th, td',
-                    'props': [('border', '1px solid black'), ('padding', '5px')]
-                }, {
-                    'selector': 'table',
-                    'props': [('border-collapse', 'collapse'), ('width', '100%')]
-                }]
-            )
+            .apply(highlight_column, axis=0)     # Highlight latar
+            .apply(lambda _: styles, axis=None)  # Highlight per sel
+            .format(fmt_dict)                    # Format angka
+            .set_table_styles([
+                {'selector': 'th, td', 'props': [('border', '1px solid black'), ('padding', '5px')]},
+                {'selector': 'table', 'props': [('border-collapse', 'collapse'), ('width', '100%')]}
+            ])
         )
+
         return styled.to_html(index=False, escape=False)
+
 
 
     def get_kartu_stok_formatted(self, start=None, end=None):
@@ -1242,6 +1303,8 @@ class RestoDB:
 
         # Paging
         all_data = list(stok_map.values())
+        # ✅ Urutkan berdasarkan nama bahan
+        all_data.sort(key=lambda x: x['nama'])  # ascending
         paged = all_data[offset:offset + limit]
 
         return paged
@@ -1281,7 +1344,300 @@ class RestoDB:
         """, (no_nota, jumlah)).fetchone()
         return row[0] if row else "-"
 
-#lanjut custom tanggal
+
+# Tambahkan di dalam kelas RestoDB (models.py)
+    def hitung_rugi_laba(self, bulan):
+        try:
+            # Pendapatan dari penjualan
+            self.cursor.execute("""
+                SELECT SUM(d.jumlah * d.harga_satuan)
+                FROM TransaksiDetail d
+                JOIN Transaksi t ON d.no_nota = t.no_nota
+                WHERE strftime('%Y-%m', t.tanggal) = ?
+            """, (bulan,))
+            pendapatan = self.cursor.fetchone()[0] or 0
+
+            # HPP dari kebutuhan bahan
+            self.cursor.execute("""
+                SELECT SUM(k.jumlah * k.harga)
+                FROM KebutuhanPaket k
+                JOIN Transaksi t ON k.no_nota = t.no_nota
+                WHERE strftime('%Y-%m', t.tanggal) = ?
+            """, (bulan,))
+            hpp = self.cursor.fetchone()[0] or 0
+
+            laba_kotor = pendapatan - hpp
+
+            # BIAYA OPERASIONAL dari tabel
+            biaya_operasional = self.get_biaya_operasional_per_bulan(bulan)
+
+            laba_bersih = laba_kotor - biaya_operasional
+
+            # Simpan ke tabel laporan
+            self.cursor.execute("""
+                INSERT INTO NeracaRugiLaba (bulan, pendapatan, hpp, laba_kotor, biaya_operasional, laba_bersih)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (bulan, pendapatan, hpp, laba_kotor, biaya_operasional, laba_bersih))
+            self.conn.commit()
+
+            return {
+                'bulan': bulan,
+                'pendapatan': pendapatan,
+                'hpp': hpp,
+                'laba_kotor': laba_kotor,
+                'biaya_operasional': biaya_operasional,
+                'laba_bersih': laba_bersih
+            }
+
+        except Exception as e:
+            print(f"Error menghitung rugi laba: {e}")
+            return None
 
 
+    def get_neraca_rugi_laba(self, bulan=None):
+        if bulan:
+            self.cursor.execute("""
+                SELECT * FROM NeracaRugiLaba WHERE bulan = ? ORDER BY bulan DESC
+            """, (bulan,))
+        else:
+            self.cursor.execute("""
+                SELECT * FROM NeracaRugiLaba ORDER BY bulan DESC
+            """)
+        
+        kolom = [desc[0] for desc in self.cursor.description]  # ambil nama kolom
+        rows = self.cursor.fetchall()
+        return [dict(zip(kolom, row)) for row in rows]  # convert ke dict
 
+    def tambah_biaya_operasional(self, bulan, keterangan, jumlah):
+        self.cursor.execute("""
+            INSERT INTO BiayaOperasional (bulan, keterangan, jumlah)
+            VALUES (?, ?, ?)
+        """, (bulan, keterangan, jumlah))
+        self.conn.commit()
+
+    def get_biaya_operasional_per_bulan(self, bulan):
+        self.cursor.execute("""
+            SELECT SUM(jumlah)
+            FROM BiayaOperasional
+            WHERE strftime('%Y-%m', tanggal_pengeluaran) = ?
+        """, (bulan,))
+        return self.cursor.fetchone()[0] or 0
+
+    def hitung_arus_kas(self, start_date, end_date):
+        # --- Kas Masuk dari Transaksi Pembayaran TUNAI, TRANSFER, QRIS ---
+        self.cursor.execute("""
+            SELECT SUM(td.jumlah * td.harga_satuan)
+            FROM TransaksiDetail td
+            JOIN Transaksi t ON td.no_nota = t.no_nota
+            WHERE DATE(t.tanggal) BETWEEN ? AND ?
+            AND LOWER(t.jenis_pembayaran) IN ('tunai', 'transfer', 'qris')
+        """, (start_date, end_date))
+        kas_masuk = self.cursor.fetchone()[0] or 0
+
+        # --- Kas Keluar: Biaya Operasional ---
+        self.cursor.execute("""
+            SELECT SUM(jumlah)
+            FROM BiayaOperasional
+            WHERE DATE(tanggal_pengeluaran) BETWEEN ? AND ?
+        """, (start_date, end_date))
+        biaya_operasional = self.cursor.fetchone()[0] or 0
+
+        # --- Kas Keluar: Pembelian LUNAS ---
+        self.cursor.execute("""
+            SELECT SUM(pd.jumlah * pd.harga)
+            FROM PembelianDetail pd
+            JOIN Pembelian p ON pd.no_nota = p.no_nota
+            WHERE DATE(p.tanggal) BETWEEN ? AND ?
+            AND p.status_pembayaran = 'LUNAS'
+        """, (start_date, end_date))
+        pembelian_lunas = self.cursor.fetchone()[0] or 0
+
+        kas_keluar = biaya_operasional + pembelian_lunas
+        kas_bersih = kas_masuk - kas_keluar
+
+        return {
+            'kas_masuk': kas_masuk,
+            'biaya_operasional': biaya_operasional,
+            'pembelian_lunas': pembelian_lunas,
+            'kas_keluar': kas_keluar,
+            'kas_bersih': kas_bersih
+        }
+
+    def ambil_detail_kas_masuk(self, start_date, end_date):
+        self.cursor.execute("""
+            SELECT t.tanggal, t.no_nota, t.jenis_pembayaran, SUM(td.jumlah * td.harga_satuan) as total
+            FROM TransaksiDetail td
+            JOIN Transaksi t ON td.no_nota = t.no_nota
+            WHERE DATE(t.tanggal) BETWEEN ? AND ?
+            AND LOWER(t.jenis_pembayaran) IN ('tunai', 'transfer', 'qris')
+            GROUP BY t.no_nota
+            ORDER BY t.tanggal ASC
+        """, (start_date, end_date))
+        return self.cursor.fetchall()
+
+    def ambil_detail_biaya_operasional(self, start_date, end_date):
+        self.cursor.execute("""
+            SELECT tanggal_pengeluaran, keterangan, jumlah
+            FROM BiayaOperasional
+            WHERE DATE(tanggal_pengeluaran) BETWEEN ? AND ?
+            ORDER BY tanggal_pengeluaran ASC
+        """, (start_date, end_date))
+        return self.cursor.fetchall()
+
+    def ambil_detail_pembelian_lunas(self, start_date, end_date):
+        self.cursor.execute("""
+            SELECT p.tanggal, p.no_nota, SUM(pd.jumlah * pd.harga) as total
+            FROM PembelianDetail pd
+            JOIN Pembelian p ON pd.no_nota = p.no_nota
+            WHERE DATE(p.tanggal) BETWEEN ? AND ?
+            AND p.status_pembayaran = 'LUNAS'
+            GROUP BY p.no_nota
+            ORDER BY p.tanggal ASC
+        """, (start_date, end_date))
+        return self.cursor.fetchall()
+
+    def get_stok_saat_ini(self):
+        self.cursor.execute("""
+            SELECT nm_bahan, jumlah, satuan, harga_modal,
+                (jumlah * harga_modal) as total_nilai
+            FROM Stok
+            ORDER BY nm_bahan COLLATE NOCASE ASC
+        """)
+        return self.cursor.fetchall()
+
+    def get_histori_stok(self, start_date, end_date):
+        # Barang masuk (pembelian)
+        self.cursor.execute("""
+            SELECT p.tanggal, d.nm_bahan, 'MASUK' as jenis, d.jumlah, d.satuan, 'Pembelian' as keterangan
+            FROM PembelianDetail d
+            JOIN Pembelian p ON d.no_nota = p.no_nota
+            WHERE DATE(p.tanggal) BETWEEN ? AND ?
+        """, (start_date, end_date))
+        masuk = self.cursor.fetchall()
+
+        # Barang keluar (pemakaian)
+        self.cursor.execute("""
+            SELECT t.tanggal, k.nm_bahan, 'KELUAR' as jenis, k.jumlah, k.satuan_pakai, 'Pemakaian Menu' as keterangan
+            FROM KebutuhanPaket k
+            JOIN Transaksi t ON k.no_nota = t.no_nota
+            WHERE DATE(t.tanggal) BETWEEN ? AND ?
+        """, (start_date, end_date))
+
+        keluar = self.cursor.fetchall()
+
+        hasil = masuk + keluar
+        hasil.sort(key=lambda x: x[0])  # Urutkan berdasarkan tanggal
+        return hasil
+
+    def get_pergerakan_bahan(self, nama_bahan, start_date, end_date):
+        # Data masuk (Pembelian)
+        self.cursor.execute("""
+            SELECT DATE(p.tanggal) as tgl, SUM(d.jumlah)
+            FROM PembelianDetail d
+            JOIN Pembelian p ON d.no_nota = p.no_nota
+            WHERE d.nm_bahan = ? AND DATE(p.tanggal) BETWEEN ? AND ?
+            GROUP BY DATE(p.tanggal)
+        """, (nama_bahan, start_date, end_date))
+        masuk = {row[0]: row[1] for row in self.cursor.fetchall()}
+
+        # Data keluar (Pemakaian)
+        self.cursor.execute("""
+            SELECT DATE(t.tanggal) as tgl, SUM(k.jumlah)
+            FROM KebutuhanPaket k
+            JOIN Transaksi t ON k.no_nota = t.no_nota
+            WHERE k.nm_bahan = ? AND DATE(t.tanggal) BETWEEN ? AND ?
+            GROUP BY DATE(t.tanggal)
+        """, (nama_bahan, start_date, end_date))
+        keluar = {row[0]: row[1] for row in self.cursor.fetchall()}
+
+        # Gabungkan tanggal
+        all_dates = sorted(set(list(masuk.keys()) + list(keluar.keys())))
+
+        result = []
+        for tgl in all_dates:
+            result.append({
+                'tanggal': tgl,
+                'masuk': masuk.get(tgl, 0),
+                'keluar': keluar.get(tgl, 0)
+            })
+        return result
+
+    def ambil_nama_bahan(self):
+        self.cursor.execute("SELECT DISTINCT nm_bahan FROM PembelianDetail ORDER BY nm_bahan")
+        return [row[0] for row in self.cursor.fetchall()]
+
+
+    def hitung_pendapatan_hari_ini(self, tgl):
+        self.cursor.execute("""
+            SELECT SUM(jumlah * harga_satuan)
+            FROM TransaksiDetail td
+            JOIN Transaksi t ON td.no_nota = t.no_nota
+            WHERE DATE(t.tanggal) = ?
+        """, (tgl,))
+        return self.cursor.fetchone()[0] or 0
+
+    def hitung_pengeluaran_hari_ini(self, tgl):
+        self.cursor.execute("""
+            SELECT COALESCE((
+                SELECT SUM(jumlah) FROM BiayaOperasional WHERE DATE(tanggal_pengeluaran) = ?
+            ), 0) +
+            COALESCE((
+                SELECT SUM(jumlah * harga)
+                FROM PembelianDetail pd
+                JOIN Pembelian p ON pd.no_nota = p.no_nota
+                WHERE DATE(p.tanggal) = ?
+            ), 0)
+        """, (tgl, tgl))
+        return self.cursor.fetchone()[0] or 0
+
+    def hitung_nilai_modal_stok(self):
+        self.cursor.execute("""
+            SELECT SUM(jumlah * IFNULL(harga_modal, 0)) FROM Stok
+        """)
+        return self.cursor.fetchone()[0] or 0
+
+    def get_rugi_laba_per_bulan(self):
+        self.cursor.execute("""
+            SELECT bulan, laba_bersih FROM NeracaRugiLaba ORDER BY bulan ASC
+        """)
+        return self.cursor.fetchall()
+
+    def get_arus_kas_per_bulan(self):
+        self.cursor.execute("""
+            SELECT strftime('%Y-%m', tanggal_pengeluaran), SUM(jumlah)
+            FROM BiayaOperasional
+            GROUP BY strftime('%Y-%m', tanggal_pengeluaran)
+        """)
+        return self.cursor.fetchall()
+
+    def get_transaksi_terbaru(self, limit=5):
+        self.cursor.execute("""
+            SELECT tanggal, no_nota, jenis_pembayaran
+            FROM Transaksi ORDER BY tanggal DESC LIMIT ?
+        """, (limit,))
+        return self.cursor.fetchall()
+
+    def hitung_pendapatan_range(self, start, end):
+        self.cursor.execute("""
+            SELECT SUM(jumlah * harga_satuan)
+            FROM TransaksiDetail td
+            JOIN Transaksi t ON td.no_nota = t.no_nota
+            WHERE DATE(t.tanggal) BETWEEN ? AND ?
+        """, (start, end))
+        return self.cursor.fetchone()[0] or 0
+
+    def hitung_pengeluaran_range(self, start, end):
+        self.cursor.execute("""
+            SELECT COALESCE((
+                SELECT SUM(jumlah)
+                FROM BiayaOperasional
+                WHERE DATE(tanggal_pengeluaran) BETWEEN ? AND ?
+            ), 0) +
+            COALESCE((
+                SELECT SUM(jumlah * harga)
+                FROM PembelianDetail pd
+                JOIN Pembelian p ON pd.no_nota = p.no_nota
+                WHERE DATE(p.tanggal) BETWEEN ? AND ?
+            ), 0)
+        """, (start, end, start, end))
+        return self.cursor.fetchone()[0] or 0

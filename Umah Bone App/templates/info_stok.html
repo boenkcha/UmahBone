@@ -40,6 +40,19 @@
         </a>
     </div>
 
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="mb-3">
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
     {% if alias_list %}
     <div class="alias-box">
         <strong>Alias nama bahan:</strong>
@@ -54,6 +67,12 @@
     {% for satuan, records in info_by_satuan.items() %}
     <h4 class="mt-4">Satuan: {{ records[0].satuan }}</h4>
     <div class="table-responsive mb-4">
+        <a href="{{ url_for('normalisasi_stok', nm_bahan=nm_bahan, satuan=satuan) }}"
+            class="btn btn-warning btn-sm my-2">
+            <i class="bi bi-calculator-fill"></i> Normalisasi Satuan {{ satuan }}
+        </a>
+
+
         <table class="table table-bordered table-striped align-middle">
             <thead>
                 <tr>
@@ -71,7 +90,11 @@
                 {% for row in records %}
                 <tr>
                     <td>{{ row.tanggal }}</td>
-                    <td>{{ row.no_nota }}</td>
+                    <td>
+                        <a href="{{ url_for('cari_transaksi' if row.jenis == 'Keluar' else 'cari_pembelian') }}?no_nota={{ row.no_nota }}" class="text-decoration-none">
+                            {{ row.no_nota }}
+                        </a>
+                    </td>
                     <td>{{ row.jenis }}</td>
                     <td class="text-end">{{ "{:.2f}".format(row.jumlah) }}</td>
                     <td>{{ row.satuan }}</td>
@@ -80,12 +103,6 @@
                     </td>
                     <td class="text-end">{{ "{:.2f}".format(row.saldo) }}</td>
                     <td>{{ row.asal }}</td>
-                    <td>
-                        <a href="{{ url_for('normalisasi_stok', nm_bahan=row.asal, satuan=row.satuan) }}"
-                        class="btn btn-warning btn-sm">
-                            <i class="bi bi-calculator-fill"></i> Normalisasi
-                        </a>
-                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

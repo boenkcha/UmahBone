@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Input Biaya Operasional</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+</head>
+<body>
+<div class="container py-4">
+
+    <h3 class="mb-4 text-center"><i class="bi bi-cash-stack text-warning"></i> Input Biaya Operasional</h3>
+
+    <!-- Form Tambah -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-warning">
+            <strong class="text-white"><i class="bi bi-plus-circle"></i> Tambah Biaya</strong>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('form_biaya_operasional') }}">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="tanggal_pengeluaran">Tanggal Pengeluaran</label>
+                        <input type="date" name="tanggal_pengeluaran" class="form-control" required>
+                    </div>
+                    <div class="col-md-5">
+                        <label for="keterangan">Keterangan</label>
+                        <input type="text" name="keterangan" class="form-control" placeholder="Contoh: Gaji, Listrik" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="jumlah">Jumlah (Rp)</label>
+                        <input type="number" name="jumlah" step="0.01" class="form-control" required>
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button class="btn btn-warning w-100"><i class="bi bi-save2"></i></button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Histori -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-secondary text-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="bi bi-clock-history"></i> Riwayat Biaya Operasional
+                </div>
+                <div>
+                    <a href="{{ url_for('unduh_biaya_operasional_excel', start_date=start_date, end_date=end_date) }}"
+                    class="btn btn-outline-light btn-sm">
+                        <i class="bi bi-file-earmark-excel"></i> Unduh Excel
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <!-- Filter Tanggal -->
+                <div class="card mb-4 shadow-sm">
+                    <div class="card-body">
+                        <form method="get" action="{{ url_for('form_biaya_operasional') }}">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-4">
+                                    <label for="start_date">Tanggal Awal:</label>
+                                    <input type="date" name="start_date" value="{{ start_date or '' }}" class="form-control">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="end_date">Tanggal Akhir:</label>
+                                    <input type="date" name="end_date" value="{{ end_date or '' }}" class="form-control">
+                                </div>
+                                <div class="col-md-4">
+                                    <button class="btn btn-outline-primary w-100" type="submit">
+                                        <i class="bi bi-search"></i> Filter Tanggal
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                        
+                    </div>
+                </div>
+
+                <table class="table table-bordered table-striped table-hover m-0">
+                    <thead class="table-dark text-center">
+                        <tr>
+                            <th>Tanggal Pengeluaran</th>
+                            <th>Keterangan</th>
+                            <th>Jumlah</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in histori %}
+                        <tr class="text-center">
+                            <td>{{ row[1] }}</td>
+                            <td>{{ row[2] }}</td>
+                            <td class="text-end">Rp {{ row[3]|int | format_number }}</td>
+                            <td>
+                                <form method="POST" action="{{ url_for('hapus_biaya_operasional', id=row[0]) }}" onsubmit="return confirm('Yakin ingin menghapus?')">
+                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="text-center text-muted">Belum ada data.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>

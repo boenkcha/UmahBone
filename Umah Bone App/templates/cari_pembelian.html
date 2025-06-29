@@ -77,18 +77,27 @@
     </div>
     <form method="POST" class="row g-3 mb-4">
         <div class="col-md-3">
+            <label class="form-label">Cari No Nota</label>
+            <input type="text" name="no_nota" class="form-control" placeholder="Contoh: PB-001" value="{{ no_nota or '' }}">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Supplier</label>
+            <input type="text" name="supplier" class="form-control" placeholder="Nama Supplier" value="{{ nama_supplier or '' }}">
+        </div>
+        <div class="col-md-2">
             <label class="form-label">Dari Tanggal</label>
             <input type="date" name="start_date" class="form-control" value="{{ start_date or '' }}">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label class="form-label">Sampai Tanggal</label>
             <input type="date" name="end_date" class="form-control" value="{{ end_date or '' }}">
         </div>
-        <div class="col-md-3 align-self-end">
-            <button type="submit" class="btn btn-primary"><i class="bi bi-funnel-fill"></i> Filter</button>
-            <a href="/cari_pembelian" class="btn btn-secondary"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
+        <div class="col-md-2 align-self-end">
+            <button type="submit" class="btn btn-primary w-100"><i class="bi bi-funnel-fill"></i> Filter</button>
+            <a href="/cari_pembelian" class="btn btn-secondary mt-2 w-100"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
         </div>
     </form>
+
 
     <div class="table-responsive">
     <table class="table table-bordered table-hover align-middle">

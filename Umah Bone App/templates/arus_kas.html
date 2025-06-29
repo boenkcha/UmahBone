@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Laporan Arus Kas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="container py-4">
+    <h3 class="text-center mb-4"><i class="bi bi-cash-coin text-primary"></i> Laporan Arus Kas</h3>
+
+    <!-- Form Tanggal -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('arus_kas') }}">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="start_date">Tanggal Awal</label>
+                        <input type="date" name="start_date" class="form-control" value="{{ start_date or '' }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="end_date">Tanggal Akhir</label>
+                        <input type="date" name="end_date" class="form-control" value="{{ end_date or '' }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-primary w-100" type="submit">
+                            <i class="bi bi-search"></i> Tampilkan
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if hasil %}
+    <!-- Ringkasan Arus Kas -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-bar-chart-fill"></i> Ringkasan Arus Kas</span>
+            <a href="{{ url_for('unduh_arus_kas_excel', start_date=start_date, end_date=end_date) }}"
+               class="btn btn-outline-light btn-sm">
+                <i class="bi bi-file-earmark-excel"></i> Unduh Excel
+            </a>
+            <a href="{{ url_for('unduh_arus_kas_pdf', start_date=start_date, end_date=end_date) }}"
+                class="btn btn-outline-danger btn-sm ms-2">
+                <i class="bi bi-file-earmark-pdf"></i> Unduh PDF
+            </a>
+
+        </div>
+        <div class="card-body">
+            <table class="table table-bordered table-hover">
+                <tbody>
+                    <tr>
+                        <th>Kas Masuk</th>
+                        <td class="text-end text-success">Rp {{ hasil.kas_masuk | format_number }}</td>
+                    </tr>
+                    <tr>
+                        <th>Kas Keluar - Biaya Operasional</th>
+                        <td class="text-end text-danger">Rp {{ hasil.biaya_operasional | format_number }}</td>
+                    </tr>
+                    <tr>
+                        <th>Kas Keluar - Pembelian (Lunas)</th>
+                        <td class="text-end text-danger">Rp {{ hasil.pembelian_lunas | format_number }}</td>
+                    </tr>
+                    <tr class="table-secondary">
+                        <th>Total Kas Keluar</th>
+                        <td class="text-end fw-bold">Rp {{ hasil.kas_keluar | format_number }}</td>
+                    </tr>
+                    <tr class="table-primary">
+                        <th>Saldo Kas Bersih</th>
+                        <td class="text-end fw-bold">Rp {{ hasil.kas_bersih | format_number }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Grafik Arus Kas -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-info text-white">
+            <i class="bi bi-graph-up"></i> Grafik Arus Kas
+        </div>
+        <div class="card-body">
+            <canvas id="grafikKas" height="120"></canvas>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if detail_masuk %}
+    <div class="mt-5">
+        <h5><i class="bi bi-arrow-down-circle"></i> Detail Kas Masuk</h5>
+        <table class="table table-sm table-bordered">
+            <thead class="table-light text-center">
+                <tr>
+                    <th>Tanggal</th><th>No Nota</th><th>Jenis Pembayaran</th><th class="text-end">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in detail_masuk %}
+                <tr>
+                    <td>{{ row[0] }}</td>
+                    <td>{{ row[1] }}</td>
+                    <td>{{ row[2] }}</td>
+                    <td class="text-end">Rp {{ row[3]|format_number }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if detail_biaya %}
+    <div class="mt-4">
+        <h5><i class="bi bi-arrow-up-circle"></i> Detail Biaya Operasional</h5>
+        <table class="table table-sm table-bordered">
+            <thead class="table-light text-center">
+                <tr>
+                    <th>Tanggal</th><th>Keterangan</th><th class="text-end">Jumlah</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in detail_biaya %}
+                <tr>
+                    <td>{{ row[0] }}</td>
+                    <td>{{ row[1] }}</td>
+                    <td class="text-end">Rp {{ row[2]|format_number }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if detail_pembelian %}
+    <div class="mt-4">
+        <h5><i class="bi bi-cart-check"></i> Detail Pembelian (Lunas)</h5>
+        <table class="table table-sm table-bordered">
+            <thead class="table-light text-center">
+                <tr>
+                    <th>Tanggal</th><th>No Nota</th><th class="text-end">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in detail_pembelian %}
+                <tr>
+                    <td>{{ row[0] }}</td>
+                    <td>{{ row[1] }}</td>
+                    <td class="text-end">Rp {{ row[2]|format_number }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+</div>
+
+<script>
+    {% if hasil %}
+    const ctx = document.getElementById('grafikKas');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Kas Masuk', 'Biaya Operasional', 'Pembelian Lunas', 'Total Kas Keluar', 'Saldo Bersih'],
+            datasets: [{
+                label: 'Jumlah (Rp)',
+                data: [
+                    {{ hasil.kas_masuk }},
+                    {{ hasil.biaya_operasional }},
+                    {{ hasil.pembelian_lunas }},
+                    {{ hasil.kas_keluar }},
+                    {{ hasil.kas_bersih }}
+                ],
+                backgroundColor: [
+                    'rgba(25, 135, 84, 0.7)',
+                    'rgba(220, 53, 69, 0.7)',
+                    'rgba(220, 53, 69, 0.7)',
+                    'rgba(108, 117, 125, 0.7)',
+                    'rgba(13, 110, 253, 0.7)'
+                ],
+                borderColor: [
+                    'rgba(25, 135, 84, 1)',
+                    'rgba(220, 53, 69, 1)',
+                    'rgba(220, 53, 69, 1)',
+                    'rgba(108, 117, 125, 1)',
+                    'rgba(13, 110, 253, 1)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return 'Rp ' + value.toLocaleString('id-ID');
+                        }
+                    }
+                }
+            }
+        }
+    });
+    {% endif %}
+</script>
+</body>
+</html>

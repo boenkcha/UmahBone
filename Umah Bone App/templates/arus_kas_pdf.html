@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            font-size: 12px;
+            margin: 20px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 5px;
+            color: #003366;
+        }
+
+        .periode {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 11px;
+            color: #555;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 25px;
+        }
+
+        th, td {
+            border: 1px solid #333;
+            padding: 6px 8px;
+            font-size: 11px;
+        }
+
+        th {
+            background-color: #e0e0e0;
+            color: #000;
+        }
+
+        .header-blue th { background-color: #d9eaf7; }
+        .header-orange th { background-color: #ffe5b4; }
+        .header-purple th { background-color: #ebd6ff; }
+
+        .right { text-align: right; }
+
+        .positive { color: green; font-weight: bold; }
+        .negative { color: red; font-weight: bold; }
+
+        .footer {
+            margin-top: 50px;
+            font-size: 11px;
+            color: #444;
+        }
+
+        .footer strong {
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Laporan Arus Kas</h2>
+<div class="periode">Periode: {{ start_date }} s/d {{ end_date }}</div>
+
+<h4>Ringkasan Arus Kas</h4>
+<table>
+    <tr><th>Kategori</th><th class="right">Jumlah (Rp)</th></tr>
+    <tr><td>Kas Masuk</td><td class="right positive">{{ hasil.kas_masuk | format_number }}</td></tr>
+    <tr><td>Biaya Operasional</td><td class="right negative">{{ hasil.biaya_operasional | format_number }}</td></tr>
+    <tr><td>Pembelian Lunas</td><td class="right negative">{{ hasil.pembelian_lunas | format_number }}</td></tr>
+    <tr><td><strong>Total Kas Keluar</strong></td><td class="right"><strong>{{ hasil.kas_keluar | format_number }}</strong></td></tr>
+    <tr>
+        <td><strong>Saldo Kas Bersih</strong></td>
+        <td class="right">
+            <strong class="{{ 'positive' if hasil.kas_bersih >= 0 else 'negative' }}">
+                {{ hasil.kas_bersih | format_number }}
+            </strong>
+        </td>
+    </tr>
+</table>
+
+{% if detail_masuk %}
+<h4>Detail Kas Masuk</h4>
+<table class="header-blue">
+    <tr>
+        <th>Tanggal</th><th>No Nota</th><th>Jenis</th><th class="right">Total</th>
+    </tr>
+    {% for row in detail_masuk %}
+    <tr>
+        <td>{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td class="right">{{ row[3]|format_number }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+{% if detail_biaya %}
+<h4>Detail Biaya Operasional</h4>
+<table class="header-orange">
+    <tr><th>Tanggal</th><th>Keterangan</th><th class="right">Jumlah</th></tr>
+    {% for row in detail_biaya %}
+    <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td class="right">{{ row[2]|format_number }}</td></tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+{% if detail_pembelian %}
+<h4>Detail Pembelian Lunas</h4>
+<table class="header-purple">
+    <tr><th>Tanggal</th><th>No Nota</th><th class="right">Total</th></tr>
+    {% for row in detail_pembelian %}
+    <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td class="right">{{ row[2]|format_number }}</td></tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+<!-- Dibuat oleh -->
+<div class="footer">
+    <strong>Dibuat Oleh:</strong><br>
+    Patricia Anis Cahyanti<br>
+    SPV Finance - Umah Bone<br>
+    <em>Tanggal Cetak: {{ now.strftime('%d %B %Y') }}</em>
+</div>
+
+
+</body>
+</html>

@@ -18,9 +18,31 @@ db = RestoDB()
 
 @app.route('/')
 def index():
-    daftar_menu = db.ambil_menu()
-    daftar_bahan = db.ambil_bahan()
-    return render_template('index.html', daftar_menu=daftar_menu, daftar_bahan=daftar_bahan)
+    daftar_menu = db.ambil_menu()  # [(nm_menu, harga)]
+    daftar_bahan = db.ambil_bahan()  # [(nm_bahan, satuan)]
+
+    # Ambil semua pasangan bahan dan satuan dari stok (dalam huruf kecil)
+    stok_data = db.ambil_stok_bahan_dan_satuan()  # kamu buat def-nya di bawah
+    stok_set = {(bahan.strip().lower(), satuan.strip().lower()) for bahan, satuan in stok_data}
+
+    daftar_menu_dengan_status = []
+    for menu in daftar_menu:
+        nama_menu = menu[0]
+        harga_menu = menu[1]
+
+        resep = db.ambil_resep_per_menu(nama_menu)  # [(nm_bahan, qty, satuan_pakai, konversi, satuan_stok)]
+
+        bahan_hilang = any(
+            (r[0].strip().lower(), r[4].strip().lower()) not in stok_set
+            for r in resep
+        )
+
+        # Simpan tuple dengan status bahan hilang
+        daftar_menu_dengan_status.append((nama_menu, harga_menu, bahan_hilang))
+
+    return render_template('index.html', daftar_menu=daftar_menu_dengan_status, daftar_bahan=daftar_bahan)
+
+
 
 @app.route('/tambah_bahan', methods=['POST'])
 def tambah_bahan():
@@ -61,9 +83,7 @@ def kelola_resep(nama_menu):
         satuan_pakai = request.form['satuan_pakai']
         konversi = float(request.form['konversi'])
         porsi = int(request.form['porsi'])
-
-        semua_bahan = db.ambil_semua_bahan()
-        satuan_stok = next((b[1] for b in semua_bahan if b[0] == nm_bahan), None)
+        satuan_stok = request.form['satuan_stok']  # Ambil dari input hidden
 
         try:
             db.tambah_resep(nm_menu, nm_bahan, qty, satuan_pakai, konversi, satuan_stok)
@@ -88,6 +108,7 @@ def kelola_resep(nama_menu):
         selected_menu=nama_menu,
         porsi=porsi
     )
+
 
 @app.route('/jual_menu', methods=['POST'])
 def jual_menu():
@@ -153,7 +174,9 @@ def stok():
         stok_list=stok_list_mirip,
         page=page,
         total_pages=total_pages,
-        q=q
+        q=q,
+        max=max,  # ← ini penting
+        min=min
     )
 
 
@@ -372,7 +395,7 @@ def transaksi():
         items = request.form.getlist('item[]')  # format: nama|jenis
         jumlahs = request.form.getlist('jumlah[]')
         hargas = request.form.getlist('harga[]')  # harga total per item
-
+        
         try:
             # MULAI transaksi database manual
             db.cursor.execute("BEGIN")
@@ -408,7 +431,7 @@ def transaksi():
 @app.route('/preview_kebutuhan', methods=['POST'])
 def preview_kebutuhan():
     data = request.get_json()
-    items = data.get('items', [])  # [{'nama': 'Nasi Goreng', 'jenis': 'menu', 'jumlah': 2}, ...]
+    items = data.get('items', [])
 
     kebutuhan = {}
     for item in items:
@@ -419,28 +442,43 @@ def preview_kebutuhan():
         if jenis == 'menu':
             resep = db.get_resep_menu(nama)  # (Nm_bahan, Qty, Konversi, Satuan_pakai)
             for bahan, qty, konversi, satuan in resep:
-                total = qty * jumlah #* konversi
+                total = qty * jumlah
                 if bahan in kebutuhan:
                     kebutuhan[bahan]['jumlah'] += total
                 else:
                     kebutuhan[bahan] = {'jumlah': total, 'satuan': satuan}
 
         elif jenis == 'paket':
-            daftar_menu = db.get_menu_dalam_paket(nama)  # (nm_menu, jumlah)
+            daftar_menu = db.get_menu_dalam_paket(nama)
             for nm_menu, jml_menu in daftar_menu:
                 resep = db.get_resep_menu(nm_menu)
                 for bahan, qty, konversi, satuan in resep:
-                    total = qty * jumlah * jml_menu #* konversi
+                    total = qty * jumlah * jml_menu
                     if bahan in kebutuhan:
                         kebutuhan[bahan]['jumlah'] += total
                     else:
                         kebutuhan[bahan] = {'jumlah': total, 'satuan': satuan}
 
-    # Format hasil untuk dikirim ke frontend
-    result = [
-        {'bahan': b, 'jumlah': round(v['jumlah'], 2), 'satuan': v['satuan']}
-        for b, v in kebutuhan.items()
-    ]
+    # Format hasil + cek stok
+    result = []
+    for b, v in kebutuhan.items():
+        jumlah_dibutuhkan = round(v['jumlah'], 2)
+        stok = db.cek_stok(b)  # harus kamu buat di class database
+
+        if stok is None:
+            status = "tidak_ada"
+        elif stok < jumlah_dibutuhkan:
+            status = "tidak_cukup"
+        else:
+            status = "cukup"
+
+        result.append({
+            'bahan': b,
+            'jumlah': jumlah_dibutuhkan,
+            'satuan': v['satuan'],
+            'status': status
+        })
+
     return jsonify(result)
 
 @app.route('/import_lengkap', methods=['POST'])
@@ -572,31 +610,28 @@ def cari_transaksi():
         no_nota = request.form.get('no_nota', '').strip()
         tanggal_awal = request.form.get('tanggal_awal', '')
         tanggal_akhir = request.form.get('tanggal_akhir', '')
+    elif request.method == 'GET' and request.args.get('no_nota'):
+        no_nota = request.args.get('no_nota').strip()
 
-        if no_nota:
-            transaksi = db.get_transaksi_by_nota(no_nota)
-            hasil = db.get_transaksi_detail(no_nota)
-            kebutuhan = db.get_kebutuhan_bahan(no_nota)
-        elif tanggal_awal and tanggal_akhir:
-            transaksi_list = db.get_transaksi_by_tanggal(tanggal_awal, tanggal_akhir)
+    # Cek jika ada no_nota, ambil detail transaksi
+    if no_nota:
+        transaksi = db.get_transaksi_by_nota(no_nota)
+        hasil = db.get_transaksi_detail(no_nota)
+        kebutuhan = db.get_kebutuhan_bahan(no_nota)
 
-        total_detail = 0
         if hasil:
-            for item in hasil:
-                if len(item) >= 4:
-                    total_detail += item[3] * item[2]  # harga * jumlah
+            total_detail = sum(item[3] * item[2] for item in hasil if len(item) >= 4)
 
-        total_kebutuhan = 0
         if kebutuhan:
             total_kebutuhan = sum(item[4] for item in kebutuhan if len(item) >= 5)
-
-
-
 
         isi_paket = {}
         for jenis, nama, jumlah, harga in hasil:
             if jenis == 'paket':
                 isi_paket[nama] = db.get_menu_dalam_paket(nama)
+
+    elif tanggal_awal and tanggal_akhir:
+        transaksi_list = db.get_transaksi_by_tanggal(tanggal_awal, tanggal_akhir)
 
     return render_template('cari_transaksi.html',
                            transaksi=transaksi,
@@ -609,6 +644,7 @@ def cari_transaksi():
                            total_detail=total_detail,
                            total_kebutuhan=total_kebutuhan,
                            isi_paket=isi_paket)
+
 #oba
 @app.route('/pembelian', methods=['GET', 'POST'])
 def pembelian():
@@ -742,17 +778,36 @@ def import_pembelian():
 
 @app.route('/cari_pembelian', methods=['GET', 'POST'])
 def cari_pembelian():
-    start_date = request.form.get('start_date')
-    end_date = request.form.get('end_date')
+    start_date = request.values.get('start_date')
+    end_date = request.values.get('end_date')
+    no_nota = request.values.get('no_nota')
+    supplier = request.values.get('supplier')
+
+
+    query = "SELECT * FROM Pembelian WHERE 1=1"
+    params = []
+
+    if no_nota:
+        query += " AND no_nota LIKE ?"
+        params.append(f"%{no_nota}%")
+
+    if supplier:
+        query += " AND nama_supplier LIKE ?"
+        params.append(f"%{supplier}%")
 
     if start_date and end_date:
-        pembelian = db.eksekusi_select("""
-            SELECT * FROM Pembelian WHERE DATE(tanggal) BETWEEN DATE(?) AND DATE(?) ORDER BY tanggal DESC
-        """, (start_date, end_date))
-    else:
-        pembelian = db.eksekusi_select("SELECT * FROM Pembelian ORDER BY tanggal DESC")
+        query += " AND DATE(tanggal) BETWEEN DATE(?) AND DATE(?)"
+        params.extend([start_date, end_date])
 
-    return render_template("cari_pembelian.html", data=pembelian, start_date=start_date, end_date=end_date)
+    query += " ORDER BY tanggal DESC"
+
+    pembelian = db.eksekusi_select(query, tuple(params))
+
+    return render_template("cari_pembelian.html", data=pembelian,
+                           start_date=start_date, end_date=end_date,
+                           no_nota=no_nota, supplier=supplier)
+
+
 
 @app.route('/rincian_pembelian/<no_nota>')
 def rincian_pembelian(no_nota):
@@ -760,6 +815,57 @@ def rincian_pembelian(no_nota):
         SELECT nm_bahan, jumlah, satuan, harga FROM PembelianDetail WHERE no_nota = ?
     """, (no_nota,))
     return jsonify(hasil)
+
+@app.route('/tautkan_bahan_resep', methods=['POST'])
+def tautkan_bahan_resep():
+    nm_menu = request.form['nm_menu']
+    nm_bahan_lama = request.form['nm_bahan_lama']
+    nm_bahan_baru = request.form['nm_bahan_baru']
+
+    try:
+        # Ambil satuan stok dari bahan baru
+        semua_bahan = db.ambil_semua_bahan()
+        satuan_stok_baru = next((b[1] for b in semua_bahan if b[0] == nm_bahan_baru), None)
+
+        # Update data resep
+        conn = db.conn
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE Resep
+            SET nm_bahan = ?, satuan_stok = ?
+            WHERE nm_menu = ? AND nm_bahan = ?
+        """, (nm_bahan_baru, satuan_stok_baru, nm_menu, nm_bahan_lama))
+        conn.commit()
+
+        flash(f"Berhasil menghubungkan '{nm_bahan_lama}' ke stok '{nm_bahan_baru}'", "success")
+
+    except Exception as e:
+        flash(f"Gagal menghubungkan bahan: {str(e)}", "danger")
+
+    return redirect(url_for('kelola_resep', nama_menu=nm_menu))
+
+@app.route('/edit_konversi', methods=['POST'])
+def edit_konversi():
+    nm_menu = request.form['nm_menu']  # tetap dipakai untuk redirect
+    nm_bahan = request.form['nm_bahan']
+    satuan_pakai = request.form['satuan_pakai']
+    satuan_stok = request.form['satuan_stok']
+    konversi_baru = request.form['konversi']
+
+    try:
+        conn = db.conn
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE Resep
+            SET konversi = ?
+            WHERE nm_bahan = ? AND satuan_pakai = ? AND satuan_stok = ?
+        """, (konversi_baru, nm_bahan, satuan_pakai, satuan_stok))
+        conn.commit()
+        flash(f"Konversi untuk bahan '{nm_bahan}' telah diperbarui di semua menu yang relevan.", "success")
+    except Exception as e:
+        flash(f"Gagal memperbarui konversi: {str(e)}", "danger")
+
+    return redirect(url_for('kelola_resep', nama_menu=nm_menu))
 
 
 
@@ -1018,40 +1124,439 @@ def generate_alias_otomatis():
     flash("Alias otomatis berhasil dibuat dari data pembelian.", "success")
     return redirect(url_for("alias_bahan"))
 
-
 @app.route('/normalisasi_stok/<nm_bahan>/<satuan>')
 def normalisasi_stok(nm_bahan, satuan):
-    cursor = db.conn.cursor()
+    conn = db.conn
+    cur = conn.cursor()
 
-    # Ambil semua data stok matching nama & satuan (case-insensitive)
-    rows = cursor.execute("""
-        SELECT jumlah, harga_modal FROM Stok
-        WHERE LOWER(nm_bahan) = LOWER(?) AND LOWER(satuan) = LOWER(?)
-    """, (nm_bahan, satuan)).fetchall()
+    try:
+        # 1. Ambil semua alias dari nama_standar
+        cur.execute("SELECT nama_lama FROM BahanAlias WHERE LOWER(nama_standar) = LOWER(?)", (nm_bahan.lower(),))
+        alias_list = [row[0] for row in cur.fetchall()]
+        semua_nama = [nm_bahan] + alias_list
 
-    if not rows:
-        flash("Data tidak ditemukan untuk dinormalisasi.")
-        return redirect(url_for('stok'))
+        # 2. Format parameter untuk IN clause
+        format_q = ",".join("?" for _ in semua_nama)
 
-    total_jumlah = sum([r[0] for r in rows])
-    total_nilai = sum([r[0] * r[1] for r in rows])
-    rata_harga = total_nilai / total_jumlah if total_jumlah else 0
+        # 3. Ambil histori pembelian dari Pembelian + PembelianDetail
+        pembelian_rows = cur.execute(f"""
+            SELECT jumlah, harga, satuan, nm_bahan
+            FROM Pembelian JOIN PembelianDetail USING(no_nota)
+            WHERE LOWER(nm_bahan) IN ({format_q}) AND LOWER(satuan) = LOWER(?)
+        """, [n.lower() for n in semua_nama] + [satuan.lower()]).fetchall()
 
-    # Hapus stok lama
-    cursor.execute("""
-        DELETE FROM Stok
-        WHERE LOWER(nm_bahan) = LOWER(?) AND LOWER(satuan) = LOWER(?)
-    """, (nm_bahan, satuan))
+        if not pembelian_rows:
+            flash(f"Tidak ditemukan data pembelian dengan satuan '{satuan}' untuk '{nm_bahan}' dan aliasnya.", "danger")
+            return redirect(url_for('infostok', nm_bahan=nm_bahan))
 
-    # Insert 1 baris hasil normalisasi
-    cursor.execute("""
-        INSERT INTO Stok (nm_bahan, jumlah, satuan, harga_modal)
-        VALUES (?, ?, ?, ?)
-    """, (nm_bahan.upper(), total_jumlah, satuan.upper(), rata_harga))
+        # 4. Hitung total dari histori pembelian
+        total_jumlah = 0
+        total_nilai = 0
+        alias_terlibat = set()
 
-    db.conn.commit()
-    flash(f"Stok '{nm_bahan}' ({satuan}) berhasil dinormalisasi.")
-    return redirect(url_for('stok'))
+        for jumlah, harga, satuan_db, asal in pembelian_rows:
+            total_jumlah += jumlah
+            total_nilai += jumlah * harga
+            alias_terlibat.add(asal)
+
+        harga_rata = total_nilai / total_jumlah if total_jumlah else 0
+
+        # 5. Hapus stok hanya untuk bahan+alias dengan satuan yg sama
+        cur.execute(f"""
+            DELETE FROM Stok 
+            WHERE LOWER(nm_bahan) IN ({format_q}) AND LOWER(satuan) = LOWER(?)
+        """, [n.lower() for n in semua_nama] + [satuan.lower()])
+
+        # 6. Insert data baru yang telah dinormalisasi
+        cur.execute("""
+            INSERT OR REPLACE INTO Stok (nm_bahan, jumlah, satuan, harga_modal)
+            VALUES (?, ?, ?, ?)
+        """, (nm_bahan, total_jumlah, satuan, harga_rata))
+
+        # 7. Catat ke LogNormalisasi
+        cur.execute("""
+            INSERT INTO LogNormalisasi (nama_standar, satuan, jumlah_awal, nilai_awal, harga_rata, alias_terlibat)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            nm_bahan,
+            satuan,
+            total_jumlah,
+            total_nilai,
+            harga_rata,
+            ", ".join(sorted(alias_terlibat))
+        ))
+
+        conn.commit()
+        flash(f"Normalisasi sukses berdasarkan histori pembelian: {total_jumlah:.2f} {satuan.upper()} ({nm_bahan})", "success")
+
+    except Exception as e:
+        flash(f"Gagal normalisasi: {str(e)}", "danger")
+
+    return redirect(url_for('infostok', nm_bahan=nm_bahan))
+
+# Tambahkan di app.py
+
+@app.route('/neraca_rugi_laba', methods=['GET', 'POST'])
+def neraca_rugi_laba():
+    if request.method == 'POST':
+        bulan = request.form['bulan']  # Format: YYYY-MM
+        hasil = db.hitung_rugi_laba(bulan)
+        if hasil:
+            flash(f"Data berhasil dihitung untuk {bulan}", "success")
+        else:
+            flash("Gagal menghitung data", "danger")
+        return redirect(url_for('neraca_rugi_laba'))
+
+    # Tampilkan data neraca rugi laba
+    data = db.get_neraca_rugi_laba()
+    return render_template('neraca_rugi_laba.html', data=data)
+
+@app.route('/neraca_rugi_laba/hapus/<int:id>', methods=['POST'])
+def hapus_neraca(id):
+    try:
+        db.cursor.execute("DELETE FROM NeracaRugiLaba WHERE id = ?", (id,))
+        db.conn.commit()
+        flash("Data berhasil dihapus", "success")
+    except Exception as e:
+        flash(f"Gagal menghapus data: {e}", "danger")
+    return redirect(url_for('neraca_rugi_laba'))
+
+@app.template_filter('format_number')
+def format_number(value):
+    return "{:,.0f}".format(value or 0)
+
+@app.route('/unduh_rugi_laba_excel')
+def unduh_rugi_laba_excel():
+    data = db.get_neraca_rugi_laba()
+    if not data:
+        flash("Tidak ada data untuk diunduh", "warning")
+        return redirect(url_for('neraca_rugi_laba'))
+
+    import pandas as pd
+    import io
+    from flask import send_file
+
+    df = pd.DataFrame(data)
+    df['pendapatan'] = df['pendapatan'].fillna(0)
+    df['hpp'] = df['hpp'].fillna(0)
+    df['laba_kotor'] = df['laba_kotor'].fillna(0)
+    df['biaya_operasional'] = df['biaya_operasional'].fillna(0)
+    df['laba_bersih'] = df['laba_bersih'].fillna(0)
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='RugiLaba')
+
+    output.seek(0)
+    return send_file(output, as_attachment=True, download_name="laporan_rugi_laba.xlsx", mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+@app.route('/biaya_operasional', methods=['GET', 'POST'])
+def form_biaya_operasional():
+    if request.method == 'POST' and 'tanggal_pengeluaran' in request.form:
+        # Proses tambah data
+        tanggal_pengeluaran = request.form['tanggal_pengeluaran']
+        keterangan = request.form['keterangan']
+        jumlah = float(request.form['jumlah'])
+
+        try:
+            db.cursor.execute("""
+                INSERT INTO BiayaOperasional (tanggal_pengeluaran, keterangan, jumlah)
+                VALUES (?, ?, ?)
+            """, (tanggal_pengeluaran, keterangan, jumlah))
+            db.conn.commit()
+            flash("Biaya operasional berhasil disimpan.", "success")
+        except Exception as e:
+            flash(f"Gagal menyimpan biaya: {e}", "danger")
+
+        return redirect(url_for('form_biaya_operasional'))
+
+    # Proses filter
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    if start_date and end_date:
+        histori = db.eksekusi_select("""
+            SELECT * FROM BiayaOperasional
+            WHERE tanggal_pengeluaran BETWEEN ? AND ?
+            ORDER BY tanggal_pengeluaran DESC
+        """, (start_date, end_date))
+    else:
+        histori = db.eksekusi_select("SELECT * FROM BiayaOperasional ORDER BY tanggal_pengeluaran DESC")
+
+    return render_template('biaya_operasional.html', histori=histori, start_date=start_date, end_date=end_date)
+
+@app.route('/hapus_biaya_operasional/<int:id>', methods=['POST'])
+def hapus_biaya_operasional(id):
+    try:
+        db.cursor.execute("DELETE FROM BiayaOperasional WHERE id = ?", (id,))
+        db.conn.commit()
+        flash("Biaya berhasil dihapus.", "success")
+    except Exception as e:
+        flash(f"Gagal menghapus: {e}", "danger")
+    return redirect(url_for('form_biaya_operasional'))
+
+
+@app.route('/unduh_biaya_operasional_excel')
+def unduh_biaya_operasional_excel():
+    import pandas as pd
+    import io
+    from flask import send_file, request
+
+    # Ambil tanggal filter dari query string
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    if start_date and end_date:
+        data = db.eksekusi_select("""
+            SELECT tanggal_pengeluaran, keterangan, jumlah
+            FROM BiayaOperasional
+            WHERE tanggal_pengeluaran BETWEEN ? AND ?
+            ORDER BY tanggal_pengeluaran DESC
+        """, (start_date, end_date))
+    else:
+        data = db.eksekusi_select("""
+            SELECT tanggal_pengeluaran, keterangan, jumlah
+            FROM BiayaOperasional
+            ORDER BY tanggal_pengeluaran DESC
+        """)
+
+    df = pd.DataFrame(data, columns=['Tanggal Pengeluaran', 'Keterangan', 'Jumlah (Rp)'])
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='BiayaOperasional')
+    output.seek(0)
+
+    return send_file(output,
+                     as_attachment=True,
+                     download_name="biaya_operasional.xlsx",
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+@app.route('/arus_kas', methods=['GET', 'POST'])
+def arus_kas():
+    hasil = detail_masuk = detail_biaya = detail_pembelian = None
+    start_date = end_date = None
+
+    if request.method == 'POST':
+        start_date = request.form['start_date']
+        end_date = request.form['end_date']
+        hasil = db.hitung_arus_kas(start_date, end_date)
+        detail_masuk = db.ambil_detail_kas_masuk(start_date, end_date)
+        detail_biaya = db.ambil_detail_biaya_operasional(start_date, end_date)
+        detail_pembelian = db.ambil_detail_pembelian_lunas(start_date, end_date)
+
+    return render_template('arus_kas.html',
+                           hasil=hasil,
+                           detail_masuk=detail_masuk,
+                           detail_biaya=detail_biaya,
+                           detail_pembelian=detail_pembelian,
+                           start_date=start_date,
+                           end_date=end_date)
+
+
+@app.route('/unduh_arus_kas_excel')
+def unduh_arus_kas_excel():
+    import pandas as pd
+    import io
+    from flask import send_file, request
+
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    hasil = db.hitung_arus_kas(start_date, end_date)
+    detail_masuk = db.ambil_detail_kas_masuk(start_date, end_date)
+    detail_biaya = db.ambil_detail_biaya_operasional(start_date, end_date)
+    detail_pembelian = db.ambil_detail_pembelian_lunas(start_date, end_date)
+
+    df_ringkasan = pd.DataFrame([
+        ['Kas Masuk', hasil['kas_masuk']],
+        ['Biaya Operasional', hasil['biaya_operasional']],
+        ['Pembelian Lunas', hasil['pembelian_lunas']],
+        ['Total Kas Keluar', hasil['kas_keluar']],
+        ['Saldo Kas Bersih', hasil['kas_bersih']]
+    ], columns=['Kategori', 'Jumlah'])
+
+    df_masuk = pd.DataFrame(detail_masuk, columns=['Tanggal', 'No Nota', 'Jenis Pembayaran', 'Total'])
+    df_biaya = pd.DataFrame(detail_biaya, columns=['Tanggal', 'Keterangan', 'Jumlah'])
+    df_pembelian = pd.DataFrame(detail_pembelian, columns=['Tanggal', 'No Nota', 'Total'])
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        currency_format = workbook.add_format({'num_format': '#,##0', 'align': 'right'})
+        header_format = workbook.add_format({'bold': True, 'bg_color': '#D9D9D9', 'border': 1})
+        total_format = workbook.add_format({'bold': True, 'top': 1, 'num_format': '#,##0', 'align': 'right'})
+
+        # Hijau jika positif, merah jika negatif (Saldo Kas Bersih)
+        kas_bersih_format = workbook.add_format({
+            'bold': True, 'align': 'right', 'num_format': '#,##0',
+            'font_color': 'green' if hasil['kas_bersih'] >= 0 else 'red'
+        })
+
+        # Helper function
+        def format_sheet(df, sheet_name, money_cols=[]):
+            df.to_excel(writer, index=False, sheet_name=sheet_name, startrow=0)
+            ws = writer.sheets[sheet_name]
+
+            # Header styling
+            for col_num, col_name in enumerate(df.columns):
+                ws.write(0, col_num, col_name, header_format)
+                maxlen = max(15, df[col_name].astype(str).map(len).max() + 2)
+                ws.set_column(col_num, col_num, maxlen)
+
+            # Format kolom uang
+            for row in range(1, len(df)+1):
+                for col in money_cols:
+                    ws.write_number(row, col, df.iloc[row-1, col], currency_format)
+
+            # Total bawah
+            if money_cols:
+                total_row = len(df) + 1
+                for col in money_cols:
+                    col_letter = chr(65 + col)
+                    ws.write_formula(total_row, col, f"=SUM({col_letter}2:{col_letter}{len(df)+1})", total_format)
+                    ws.write(total_row, col - 1, "Total", total_format)
+
+            # 🟢 Tambahkan AutoFilter
+            ws.autofilter(0, 0, len(df), len(df.columns) - 1)
+
+
+        # Tulis ke sheets
+        format_sheet(df_masuk, 'Kas Masuk', money_cols=[3])
+        format_sheet(df_biaya, 'Biaya Operasional', money_cols=[2])
+        format_sheet(df_pembelian, 'Pembelian Lunas', money_cols=[2])
+
+        # Sheet Ringkasan manual supaya bisa beri format khusus
+        df_ringkasan.to_excel(writer, index=False, sheet_name='Ringkasan')
+        ws = writer.sheets['Ringkasan']
+        ws.set_column(0, 0, 25)
+        ws.set_column(1, 1, 20)
+
+        for i in range(len(df_ringkasan)):
+            ws.write(0, 0, df_ringkasan.columns[0], header_format)
+            ws.write(0, 1, df_ringkasan.columns[1], header_format)
+            ws.write(i+1, 0, df_ringkasan.iloc[i, 0])
+            value = df_ringkasan.iloc[i, 1]
+            if df_ringkasan.iloc[i, 0] == 'Saldo Kas Bersih':
+                ws.write_number(i+1, 1, value, kas_bersih_format)
+            else:
+                ws.write_number(i+1, 1, value, currency_format)
+
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"arus_kas_{start_date}_sd_{end_date}.xlsx",
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+@app.route('/unduh_arus_kas_pdf')
+def unduh_arus_kas_pdf():
+    from flask import render_template, request, send_file
+    from xhtml2pdf import pisa
+    import io
+
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    hasil = db.hitung_arus_kas(start_date, end_date)
+    detail_masuk = db.ambil_detail_kas_masuk(start_date, end_date)
+    detail_biaya = db.ambil_detail_biaya_operasional(start_date, end_date)
+    detail_pembelian = db.ambil_detail_pembelian_lunas(start_date, end_date)
+
+    html = render_template('arus_kas_pdf.html',
+                           hasil=hasil,
+                           detail_masuk=detail_masuk,
+                           detail_biaya=detail_biaya,
+                           detail_pembelian=detail_pembelian,
+                           start_date=start_date,
+                           end_date=end_date,
+                           now=datetime.now())
+
+    result = io.BytesIO()
+    pisa.CreatePDF(io.StringIO(html), dest=result)
+    result.seek(0)
+
+    return send_file(result,
+                     mimetype='application/pdf',
+                     as_attachment=True,
+                     download_name=f"arus_kas_{start_date}_sd_{end_date}.pdf")
+
+
+@app.route('/laporan_stok')
+def laporan_stok():
+    data = db.get_stok_saat_ini()
+    total_modal = sum(row[4] or 0 for row in data)  # row[4] = total_nilai per bahan
+    return render_template('laporan_stok.html', data=data, total_modal=total_modal)
+
+
+@app.route('/histori_stok', methods=['GET', 'POST'])
+def histori_stok():
+    data = []
+    start = end = None
+
+    if request.method == 'POST':
+        start = request.form['start_date']
+        end = request.form['end_date']
+        data = db.get_histori_stok(start, end)
+
+    return render_template('histori_stok.html', data=data, start_date=start, end_date=end)
+
+
+@app.route('/grafik_bahan', methods=['GET', 'POST'])
+def grafik_bahan():
+    data = []
+    nama_bahan = ''
+    start = end = None
+
+    if request.method == 'POST':
+        nama_bahan = request.form['bahan']
+        start = request.form['start']
+        end = request.form['end']
+        data = db.get_pergerakan_bahan(nama_bahan, start, end)
+
+    # Ambil list semua bahan
+    daftar_bahan = db.ambil_nama_bahan()  # Fungsi: SELECT DISTINCT nm_bahan FROM Stok/PembelianDetail
+
+    return render_template('grafik_bahan.html',
+                           data=data,
+                           daftar_bahan=daftar_bahan,
+                           bahan_terpilih=nama_bahan,
+                           start=start,
+                           end=end)
+
+@app.route('/dashboard', methods=['GET', 'POST'])
+def dashboard():
+    import datetime
+    today = datetime.date.today()
+    start = end = today
+
+    if request.method == 'POST':
+        start = request.form['start_date']
+        end = request.form['end_date']
+    else:
+        start = today.replace(day=1).isoformat()
+        end = today.isoformat()
+
+    # Data berdasarkan filter tanggal
+    pendapatan = db.hitung_pendapatan_range(start, end)
+    pengeluaran = db.hitung_pengeluaran_range(start, end)
+    nilai_stok = db.hitung_nilai_modal_stok()
+    chart_rugi_laba = db.get_rugi_laba_per_bulan()
+    chart_arus_kas = db.get_arus_kas_per_bulan()
+    transaksi_terbaru = db.get_transaksi_terbaru(5)
+
+    return render_template('dashboard.html',
+        pendapatan=pendapatan,
+        pengeluaran=pengeluaran,
+        nilai_stok=nilai_stok,
+        chart_rugi_laba=chart_rugi_laba,
+        chart_arus_kas=chart_arus_kas,
+        transaksi_terbaru=transaksi_terbaru,
+        start_date=start,
+        end_date=end)
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -282,10 +282,19 @@ function updatePreviewKebutuhan() {
             const tbodyPreview = $('#previewKebutuhan tbody');
             tbodyPreview.empty();
             response.forEach(bahan => {
-                tbodyPreview.append(`
-                    <tr>
+                let rowClass = "";
+                if (bahan.status === "tidak_cukup") {
+                    rowClass = "table-warning"; // kuning
+                } else if (bahan.status === "tidak_ada") {
+                    rowClass = "table-danger"; // merah
+                } else {
+                    rowClass = ""; // default atau bisa "table-light"
+                }
+
+                $('#previewKebutuhan tbody').append(`
+                    <tr class="${rowClass}">
                         <td>${bahan.bahan}</td>
-                        <td>${bahan.jumlah}</td>
+                        <td class="text-end">${bahan.jumlah}</td>
                         <td>${bahan.satuan}</td>
                     </tr>
                 `);
