@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            font-size: 11px;
+            margin: 20px;
+            color: #333;
+        }
+
+        h2 {
+            text-align: center;
+            color: #003366;
+            margin-bottom: 0;
+        }
+
+        .periode {
+            text-align: center;
+            font-size: 10px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            padding: 6px 10px;
+            border-left: 5px solid #003366;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+
+        .summary-box {
+            width: 100%;
+            border: 1px solid #ccc;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        .summary-box td {
+            padding: 6px 10px;
+            font-size: 11px;
+        }
+
+        .summary-box .label {
+            background-color: #f8f8f8;
+            font-weight: bold;
+            width: 70%;
+        }
+
+        .summary-box .value {
+            text-align: right;
+            font-weight: bold;
+            width: 30%;
+        }
+
+        .positive { color: green; }
+        .negative { color: red; }
+
+        .total-row {
+            border-top: 1px solid #000;
+            font-weight: bold;
+            background-color: #eef;
+        }
+
+        .saldo-row {
+            border-top: 2px solid #000;
+            background-color: #ddd;
+        }
+
+        table.data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 10px;
+        }
+
+        table.data-table th, table.data-table td {
+            border: 1px solid #888;
+            padding: 5px 6px;
+        }
+
+        table.data-table th {
+            background-color: #f0f6ff;
+            font-weight: bold;
+        }
+
+        .right { text-align: right; }
+
+        .footer {
+            margin-top: 50px;
+            font-size: 10px;
+            color: #555;
+        }
+
+        .footer strong {
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Laporan Arus Kas</h2>
+<div class="periode">Periode: {{ start_date }} s/d {{ end_date }}</div>
+
+<div class="section-title">Ringkasan Arus Kas</div>
+<table class="summary-box">
+    <tr><td class="label">• Transaksi Langsung (Tunai/Transfer/QRIS)</td><td class="value positive">{{ hasil.kas_masuk | format_number }}</td></tr>
+    <tr><td class="label">• Pelunasan Piutang</td><td class="value positive">{{ hasil.pelunasan_piutang | format_number }}</td></tr>
+    <tr><td class="label">• Biaya Operasional</td><td class="value negative">{{ hasil.biaya_operasional | format_number }}</td></tr>
+    <tr><td class="label">• Pembelian (Lunas)</td><td class="value negative">{{ hasil.pembelian_lunas | format_number }}</td></tr>
+    <tr><td class="label">• Pelunasan Hutang</td><td class="value negative">{{ hasil.pelunasan_utang | format_number }}</td></tr>
+    <tr class="total-row"><td class="label">Total Kas Keluar</td><td class="value">{{ hasil.kas_keluar | format_number }}</td></tr>
+    <tr class="saldo-row">
+        <td class="label">Saldo Kas Bersih</td>
+        <td class="value {{ 'positive' if hasil.kas_bersih >= 0 else 'negative' }}">{{ hasil.kas_bersih | format_number }}</td>
+    </tr>
+</table>
+
+{% if detail_masuk %}
+<div class="section-title">Detail Kas Masuk</div>
+<table class="data-table">
+    <tr><th>Tanggal</th><th>No Nota</th><th>Jenis</th><th class="right">Total</th></tr>
+    {% for row in detail_masuk %}
+    <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td class="right">{{ row[3]|format_number }}</td></tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+{% if detail_piutang %}
+<div class="section-title">Pelunasan Piutang</div>
+<table class="data-table">
+    <tr><th>Tanggal</th><th>No Nota</th><th class="right">Jumlah</th><th>Keterangan</th></tr>
+    {% for row in detail_piutang %}
+    <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td class="right">{{ row[2]|format_number }}</td><td>{{ row[3] }}</td></tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+{% if detail_biaya %}
+<div class="section-title">Detail Biaya Operasional</div>
+<table class="data-table">
+    <tr><th>Tanggal</th><th>Keterangan</th><th class="right">Jumlah</th></tr>
+    {% for row in detail_biaya %}
+    <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td class="right">{{ row[2]|format_number }}</td></tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+{% if detail_pembelian %}
+<div class="section-title">Detail Pembelian Lunas</div>
+<table class="data-table">
+    <tr><th>Tanggal</th><th>No Nota</th><th class="right">Total</th></tr>
+    {% for row in detail_pembelian %}
+    <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td class="right">{{ row[2]|format_number }}</td></tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+{% if detail_utang %}
+<div class="section-title">Pelunasan Hutang</div>
+<table class="data-table">
+    <tr><th>Tanggal</th><th>No Nota</th><th class="right">Jumlah</th><th>Keterangan</th></tr>
+    {% for row in detail_utang %}
+    <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td class="right">{{ row[2]|format_number }}</td><td>{{ row[3] }}</td></tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+<div class="footer">
+    <strong>Dibuat Oleh:</strong><br>
+    Patricia Anis Cahyanti<br>
+    SPV Finance - Umah Bone<br>
+    <em>Tanggal Cetak: {{ now.strftime('%d %B %Y') }}</em>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Pelunasan Piutang</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container py-4">
+
+    <h3 class="mb-4">🟩 Form Pelunasan Piutang</h3>
+
+    <!-- Form Cari No Nota -->
+    <form method="POST" action="{{ url_for('pelunasan_piutang') }}" class="mb-4">
+        <label>Cari No Nota Penjualan:</label>
+        <div class="input-group">
+            <input type="text" name="no_nota" class="form-control" placeholder="Contoh: TRX-001" required>
+            <button class="btn btn-primary">Cari</button>
+        </div>
+    </form>
+
+    <!-- Menampilkan pesan flash jika ada -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="alert alert-{{ messages[0][0] }}">
+                {{ messages[0][1] }}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    {% if pencarian_dilakukan %}
+        {% if data.no_nota and sisa_hutang > 0 %}
+        <!-- Form Pelunasan Piutang (jika belum lunas) -->
+        <form method="POST" action="{{ url_for('simpan_pelunasan_piutang') }}">
+            <input type="hidden" name="no_nota" value="{{ data.no_nota }}">
+
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label>No Nota:</label>
+                    <input class="form-control" value="{{ data.no_nota }}" disabled>
+                </div>
+                <div class="col-md-4">
+                    <label>Tanggal Transaksi:</label>
+                    <input class="form-control" value="{{ data.tanggal }}" disabled>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label>Metode Pembayaran:</label>
+                        <select name="metode_pembayaran" class="form-select" required>
+                            <option value="">-- Pilih Metode --</option>
+                            <option value="TUNAI">TUNAI</option>
+                            <option value="QRIS">QRIS</option>
+                            <option value="TRANSFER">TRANSFER</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label>Total Piutang:</label>
+                    <input class="form-control" value="Rp {{ data.total_piutang | int | format_number }}" disabled>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label>Sisa Hutang yang Harus Dibayar:</label>
+                    <input class="form-control" value="Rp {{ sisa_hutang | int | format_number }}" disabled>
+                </div>
+                <div class="col-md-6">
+                    <label>Tanggal Pelunasan:</label>
+                    <input type="date" name="tanggal" class="form-control" required>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label>Jumlah Dibayar:</label>
+                    <input type="number" name="jumlah" class="form-control" required>
+                </div>
+                <div class="col-md-6">
+                    <label>Keterangan (opsional):</label>
+                    <input type="text" name="keterangan" class="form-control">
+                </div>
+            </div>
+
+            <button class="btn btn-success">Simpan Pelunasan</button>
+        </form>
+
+        {% elif piutang_lunas %}
+        <!-- Jika nota sudah lunas, tampilkan riwayat pelunasannya -->
+        <h5>Riwayat Pelunasan</h5>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>No Nota</th>
+                    <th>Tanggal Pelunasan</th>
+                    <th>Jumlah Dibayar</th>
+                    <th>Metode</th>
+                    <th>Keterangan</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pelunasan in piutang_lunas %}
+                <tr>
+                    <td>{{ pelunasan[0] }}</td>
+                    <td>{{ pelunasan[1] }}</td>
+                    <td>Rp {{ pelunasan[2] | int | format_number }}</td>
+                    <td>{{ pelunasan[4] }}</td>  <!-- asumsi index ke-4 untuk metode -->
+                    <td>{{ pelunasan[3] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% else %}
+        <!-- Jika nota tidak ditemukan atau tidak valid -->
+        <p class="text-danger">Nota tidak ditemukan atau tidak valid.</p>
+        {% endif %}
+
+    {% else %}
+    <!-- Sebelum pencarian dilakukan -->
+    <p class="text-warning">Silakan lakukan pencarian No Nota terlebih dahulu.</p>
+    {% endif %}
+
+</div>
+</body>
+</html>

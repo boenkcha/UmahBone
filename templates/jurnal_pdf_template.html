@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Jurnal Umum</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        h1 {
+            text-align: center;
+        }
+        /* Perpendek kolom Debet, Kredit, Saldo */
+        .short-column {
+            width: 12%;
+        }
+        /* Perbesar kolom Nama Akun dan Keterangan */
+        .long-column {
+            width: 30%;
+        }
+        .medium-column {
+            width: 20%;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Jurnal Umum</h1>
+<p><strong>Periode: {{ start }} - {{ end }}</strong></p>
+
+<table>
+    <thead>
+        <tr>
+            <th>Tanggal</th>
+            <th>Kode Akun</th>
+            <th class="medium-column">Nama Akun</th>  <!-- Kolom Nama Akun Dilebarkan -->
+            <th class="short-column">Debet</th>
+            <th class="short-column">Kredit</th>
+            <th>No Ref</th>
+            <th class="long-column">Keterangan</th>  <!-- Kolom Keterangan Dilebarkan -->
+        </tr>
+    </thead>
+    <tbody>
+        {% for jurnal in data %}
+            <tr>
+                <td>{{ jurnal.tanggal }}</td>
+                <td>{{ jurnal.kode_akun }}</td>
+                <td>{{ jurnal.akun }}</td>
+                <td>{{ jurnal.debet | format_number }}</td>
+                <td>{{ jurnal.kredit | format_number }}</td>
+                <td>{{ jurnal.no_ref }}</td>
+                <td>{{ jurnal.keterangan }}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+</body>
+</html>

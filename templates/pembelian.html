@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Form Pembelian</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f0f2f5;
+        }
+
+        .form-section {
+            background: #ffffff;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+        }
+
+        .bahan-item .form-control,
+        .bahan-item .form-select {
+            min-height: 38px;
+        }
+
+        .btn-custom {
+            min-width: 140px;
+        }
+
+        h2, h5 {
+            color: #343a40;
+        }
+
+        table th {
+            background-color: #f1f1f1;
+        }
+
+        .btn-danger.btn-sm {
+            padding: 4px 8px;
+        }
+    </style>
+</head>
+<body>
+<div class="container py-4">
+
+    <h2 class="mb-4">PEMBELIAN BAHAN</h2>
+
+    <div class="d-flex justify-content-between mb-4">
+        <a href="/" class="btn btn-secondary">← Kembali ke Beranda</a>
+        <a href="/pembelian/import" class="btn btn-success">📁 Import Pembelian CSV</a>
+    </div>
+
+    <!-- Form Pencarian No Nota -->
+    <form method="GET" action="/pembelian" class="mb-4">
+        <div class="input-group">
+            <input type="text" name="no_nota" class="form-control" placeholder="🔍 Cari No Nota..." required>
+            <button class="btn btn-primary" type="submit">Cari</button>
+        </div>
+    </form>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% if mode == 'form' %}
+    <form method="POST" action="/pembelian" class="form-section mb-4">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <label class="form-label">No Nota</label>
+                <input type="text" name="no_nota" class="form-control" required>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Tanggal</label>
+                <input type="date" name="tanggal" class="form-control" required>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Nama Supplier</label>
+                <input type="text" name="nama_supplier" class="form-control" required>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <label class="form-label">Status Pembayaran</label>
+            <select name="status_pembayaran" class="form-select" required>
+                <option value="Lunas">Lunas</option>
+                <option value="Belum Lunas">Belum Lunas</option>
+                <option value="Termin">Termin</option>
+            </select>
+        </div>
+
+        <h5 class="mb-3">🧾 Detail Bahan</h5>
+        <div id="bahan-container">
+            <div class="row g-2 align-items-end bahan-item mb-2">
+                <div class="col-md-3">
+                    <input name="nm_bahan[]" class="form-control" list="daftar_bahan_list" required oninput="updateSatuanInput(this)">
+                    <datalist id="daftar_bahan_list">
+                        {% for b in daftar_bahan %}
+                            <option value="{{ b }}">
+                        {% endfor %}
+                    </datalist>
+                </div>
+                <div class="col-md-2">
+                    <input type="number" step="0.01" name="jumlah[]" class="form-control" placeholder="Jumlah" required>
+                </div>
+                <div class="col-md-2">
+                    <input type="text" name="satuan[]" class="form-control" placeholder="Satuan" required>
+                </div>
+                <div class="col-md-3">
+                    <input type="number" step="0.01" name="harga[]" class="form-control" placeholder="Harga Total" required>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="button" class="btn btn-outline-danger btn-sm remove-item">✕ Hapus</button>
+                </div>
+            </div>
+        </div>
+
+        <button type="button" class="btn btn-outline-secondary mt-2" onclick="tambahBahan()">+ Tambah Bahan</button>
+        <hr>
+        <button type="submit" class="btn btn-primary btn-lg btn-custom">💾 Simpan Pembelian</button>
+    </form>
+    {% endif %}
+
+    {% if mode == 'result' and daftar_pembelian %}
+        <div class="form-section">
+            <h5 class="mb-2">🧾 Detail Pembelian - No Nota: {{ daftar_pembelian[0][0] }}</h5>
+            <p>
+                Tanggal: {{ daftar_pembelian[0][1] }}<br>
+                Supplier: {{ daftar_pembelian[0][2] }}<br>
+                Status: <span class="badge bg-info text-dark">{{ daftar_pembelian[0][3] }}</span>
+            </p>
+
+            <p>
+                <a href="/pembelian/edit?no_nota={{ daftar_pembelian[0][0] }}" class="btn btn-warning btn-sm">✏️ Edit</a>
+            </p>
+
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Nama Bahan</th>
+                        <th>Jumlah</th>
+                        <th>Satuan</th>
+                        <th>Harga</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set ns = namespace(subtotal=0) %}
+                    {% for row in daftar_pembelian %}
+                        {% set jumlah = row[5]|replace(',', '')|float %}
+                        {% set harga = row[7]|replace(',', '')|float %}
+                        {% set total = jumlah * harga %}
+                        {% set ns.subtotal = ns.subtotal + total %}
+                        <tr>
+                            <td>{{ row[4] }}</td>
+                            <td>{{ "{:,.2f}".format(jumlah) }}</td>
+                            <td>{{ row[6] }}</td>
+                            <td>{{ "{:,.0f}".format(harga) }}</td>
+                            <td>{{ "{:,.0f}".format(total) }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p class="fw-bold fs-5 text-end">Sub Total: {{ "{:,.0f}".format(ns.subtotal) }}</p>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+// Tambah baris bahan baru
+function tambahBahan() {
+    const container = document.getElementById('bahan-container');
+    const item = container.querySelector('.bahan-item').cloneNode(true);
+    item.querySelectorAll('input').forEach(input => input.value = '');
+    container.appendChild(item);
+}
+
+
+// Hapus baris bahan
+document.addEventListener('click', function (e) {
+    if (e.target.classList.contains('remove-item')) {
+        const item = e.target.closest('.bahan-item');
+        const total = document.querySelectorAll('.bahan-item').length;
+        if (total > 1) item.remove();
+    }
+});
+
+// Cegah enter di input harga
+document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('keydown', function (e) {
+        if (e.target.matches("input[name='harga[]']") && e.key === 'Enter') {
+            e.preventDefault();
+        }
+    });
+});
+
+// Fetch satuan otomatis dari server
+async function updateSatuan(selectElement) {
+    const namaBahan = selectElement.value;
+    const satuanInput = selectElement.closest('.bahan-item').querySelector('input[name="satuan[]"]');
+    if (!namaBahan) return satuanInput.value = '';
+    try {
+        const res = await fetch('/get_satuan?nama_bahan=' + encodeURIComponent(namaBahan));
+        if (!res.ok) throw new Error('Error');
+        const data = await res.json();
+        satuanInput.value = data.satuan || '';
+    } catch (err) {
+        console.error('Fetch satuan error:', err);
+    }
+}
+
+// Pasang listener onchange
+function pasangListenerDropdown() {
+    document.querySelectorAll('select[name="nm_bahan[]"]').forEach(select => {
+        select.removeEventListener('change', onchangeHandler);
+        select.addEventListener('change', onchangeHandler);
+    });
+}
+
+function onchangeHandler(event) {
+    updateSatuan(event.target);
+}
+
+pasangListenerDropdown();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

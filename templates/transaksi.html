@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <title>Transaksi Penjualan dengan Preview Kebutuhan Bahan</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Select2 -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <style>
+        .select2-container { width: 100% !important; }
+        #previewKebutuhan tbody td {
+            vertical-align: middle;
+        }
+    
+        .total-update {
+            animation: pulse 0.5s;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="bg-light">
+<div class="container mt-5">
+    <h2 class="mb-4">🧾 Transaksi Penjualan dengan Preview Kebutuhan Bahan</h2>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="mb-3">
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <div class="mb-4">
+        <a href="/" class="btn btn-secondary">← Kembali ke Beranda</a>
+    </div>
+    <form action="{{ url_for('transaksi') }}" method="POST" id="formTransaksi">
+        <!-- Info transaksi -->
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <label for="no_nota" class="form-label">No Nota</label>
+                <input type="text" id="no_nota" name="no_nota" class="form-control" required />
+            </div>
+            <div class="col-md-3">
+                <label for="konsumen" class="form-label">Konsumen</label>
+                <input type="text" id="konsumen" name="konsumen" class="form-control" />
+            </div>
+            <div class="col-md-3">
+                <label for="tanggal" class="form-label">Tanggal</label>
+                <input type="date" id="tanggal" name="tanggal" class="form-control" required />
+            </div>
+            <div class="col-md-3">
+                <label for="jenis_pembayaran" class="form-label">Pembayaran</label>
+                <select id="jenis_pembayaran" name="jenis_pembayaran" class="form-select">
+                    <option value="Tunai">Tunai</option>
+                    <option value="Transfer">Transfer</option>
+                    <option value="QRIS">QRIS</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Tambah Item -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-primary text-white">Tambah Item (Menu/Paket)</div>
+            <div class="card-body row g-2 align-items-end">
+                <div class="col-md-5">
+                    <label for="itemSelect" class="form-label">Item</label>
+                    <select id="itemSelect" class="form-select select2" style="width: 100%;">
+                        <option></option>
+                        <!-- Di bagian combo box -->
+                        <optgroup label="Menu">
+                            {% for menu in daftar_menu %}
+                                <option value="{{ menu.nama }}|menu|{{ menu.harga }}">
+                                    {{ menu.nama }} (Rp {{ "{:,.0f}".format(menu.harga) }})
+                                </option>
+                            {% endfor %}
+                        </optgroup>
+                        <optgroup label="Paket">
+                            {% for paket in daftar_paket %}
+                                <option value="{{ paket.nama }}|paket|{{ paket.harga }}">
+                                    {{ paket.nama }} (Rp {{ "{:,.0f}".format(paket.harga) }})
+                                </option>
+                            {% endfor %}
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="jumlahItem" class="form-label">Jumlah</label>
+                    <input type="number" id="jumlahItem" class="form-control" min="1" value="1" />
+                </div>
+                <div class="col-md-2">
+                    <button type="button" class="btn btn-success w-100" onclick="tambahItem()">Tambah</button>
+                </div>
+                <div class="col-md-3">
+                    <button type="button" class="btn btn-secondary w-100" onclick="resetForm()">Reset Form</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daftar Item -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-secondary text-white">Item Ditambahkan</div>
+            <div class="card-body p-0">
+                <table class="table table-bordered mb-0" id="tabelItem">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nama</th>
+                            <th>Jenis</th>
+                            <th>Jumlah</th>
+                            <th>Harga Satuan</th>
+                            <th>Total Harga</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Row item akan ditambahkan di sini -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Preview Kebutuhan Bahan -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-info text-white">Preview Kebutuhan Bahan</div>
+            <div class="card-body p-0">
+                <table class="table table-striped mb-0" id="previewKebutuhan">
+                    <thead>
+                        <tr>
+                            <th>Bahan</th>
+                            <th>Jumlah</th>
+                            <th>Satuan</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Hasil preview kebutuhan bahan muncul di sini -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-md-6"></div>
+            <div class="col-md-6 text-end">
+                <h4>Total Transaksi: <span id="totalTransaksi">Rp 0</span></h4>
+            </div>
+        </div>
+        <!-- Tombol Simpan -->
+        <div class="text-end mb-5">
+            <button type="submit" class="btn btn-primary">Simpan Transaksi</button>
+            <a href="#" id="btnCancel" class="btn btn-danger">Batal</a>
+        </div>
+
+
+        <input type="hidden" name="items_json" id="items_json" />
+    </form>
+</div>
+
+<script>
+$(document).ready(function() {
+    $('.select2').select2({
+        placeholder: "Pilih item...",
+        allowClear: true
+    });
+    hitungTotalTransaksi();
+});
+
+function tambahItem() {
+    const select = document.getElementById('itemSelect');
+    const jumlahInput = document.getElementById('jumlahItem');
+    const jumlah = parseInt(jumlahInput.value);
+    const value = select.value;
+
+    if (!value) {
+        alert("Pilih item terlebih dahulu!");
+        return;
+    }
+    if (isNaN(jumlah) || jumlah < 1) {
+        alert("Jumlah minimal 1!");
+        jumlahInput.focus();
+        return;
+    }
+
+    const [nama, jenis, hargaSatuan] = value.split('|');
+    const totalHarga = jumlah * parseFloat(hargaSatuan);
+
+    // Cek apakah item sudah ada di tabel
+    const tbody = document.querySelector('#tabelItem tbody');
+    let found = false;
+    
+    tbody.querySelectorAll('tr').forEach(row => {
+        const existingItem = row.querySelector('input[name="item[]"]').value;
+        if (existingItem === `${nama}|${jenis}`) {
+            // Update item yang sudah ada
+            const currentJumlah = parseInt(row.querySelector('input[name="jumlah[]"]').value) + jumlah;
+            const currentTotal = parseFloat(row.querySelector('input[name="harga[]"]').value) + totalHarga;
+            
+            row.querySelector('td:nth-child(3)').innerHTML = `${currentJumlah}<input type="hidden" name="jumlah[]" value="${currentJumlah}">`;
+            row.querySelector('td:nth-child(5)').innerHTML = `Rp ${currentTotal.toLocaleString('id-ID')}<input type="hidden" name="harga[]" value="${currentTotal}">`;
+            
+            found = true;
+        }
+    });
+
+    if (!found) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>
+                ${nama}
+                <input type="hidden" name="item[]" value="${nama}|${jenis}">
+            </td>
+            <td>${jenis}</td>
+            <td>
+                ${jumlah}
+                <input type="hidden" name="jumlah[]" value="${jumlah}">
+            </td>
+            <td>Rp ${parseFloat(hargaSatuan).toLocaleString('id-ID')}</td>
+            <td>
+                Rp ${totalHarga.toLocaleString('id-ID')}
+                <input type="hidden" name="harga[]" value="${totalHarga}">
+            </td>
+            <td><button type="button" class="btn btn-sm btn-danger" onclick="hapusBaris(this)">Hapus</button></td>
+        `;
+        tbody.appendChild(row);
+    }
+
+    // Reset form
+    select.value = null;
+    $('.select2').trigger('change');
+    jumlahInput.value = 1;
+    
+    // Update preview kebutuhan bahan
+    updatePreviewKebutuhan();
+    hitungTotalTransaksi();
+}
+
+function hapusBaris(btn) {
+    btn.closest('tr').remove();
+    updatePreviewKebutuhan();
+    hitungTotalTransaksi();
+}
+
+function resetForm() {
+    $('#formTransaksi')[0].reset();
+    $('.select2').val(null).trigger('change');
+    $('#tabelItem tbody').empty();
+    $('#previewKebutuhan tbody').empty();
+    hitungTotalTransaksi();
+}
+
+function updatePreviewKebutuhan() {
+    const items = [];
+    document.querySelectorAll('#tabelItem tbody tr').forEach(row => {
+        const item = row.querySelector('input[name="item[]"]').value.split('|');
+        const jumlah = row.querySelector('input[name="jumlah[]"]').value;
+        items.push({
+            nama: item[0],
+            jenis: item[1],
+            jumlah: jumlah
+        });
+    });
+
+    if (items.length === 0) {
+        $('#previewKebutuhan tbody').empty();
+        return;
+    }
+
+    $.ajax({
+        url: "{{ url_for('preview_kebutuhan') }}",
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({ items }),
+        success: function(response) {
+            const tbodyPreview = $('#previewKebutuhan tbody');
+            tbodyPreview.empty();
+            response.forEach(bahan => {
+                let rowClass = "";
+                if (bahan.status === "tidak_cukup") {
+                    rowClass = "table-warning"; // kuning
+                } else if (bahan.status === "tidak_ada") {
+                    rowClass = "table-danger"; // merah
+                } else {
+                    rowClass = ""; // default atau bisa "table-light"
+                }
+
+                $('#previewKebutuhan tbody').append(`
+                    <tr class="${rowClass}">
+                        <td>${bahan.bahan}</td>
+                        <td class="text-end">${bahan.jumlah}</td>
+                        <td>${bahan.satuan}</td>
+                    </tr>
+                `);
+            });
+        },
+        error: function() {
+            alert("Gagal mendapatkan data preview kebutuhan bahan.");
+        }
+    });
+}
+
+function hitungTotalTransaksi() {
+    let total = 0;
+    const hargaInputs = document.querySelectorAll('input[name="harga[]"]');
+    console.log("Menghitung total...");
+    
+    hargaInputs.forEach(input => {
+        const value = parseFloat(input.value);
+        if (!isNaN(value)) {
+            total += value;
+        }
+    });
+    
+    const totalElement = document.getElementById('totalTransaksi');
+    totalElement.textContent = 'Rp ' + total.toLocaleString('id-ID');
+    console.log("Total diperoleh:", total);
+    // Animasi (opsional)
+    totalElement.classList.add('total-update');
+    setTimeout(() => {
+        totalElement.classList.remove('total-update');
+    }, 500);
+    
+    return total;
+}
+
+document.getElementById("formTransaksi").addEventListener("submit", function () {
+    const rows = document.querySelectorAll("#tabelItem tbody tr");
+    let items = [];
+
+    rows.forEach(row => {
+        const nama = row.querySelector(".nama").innerText;
+        const jenis = row.querySelector(".jenis").innerText;
+        const jumlah = parseInt(row.querySelector(".jumlah").innerText);
+        const harga_satuan = parseInt(row.querySelector(".harga_satuan").innerText.replace(/[^\d]/g, ''));
+
+        items.push({
+            nama,
+            jenis,
+            jumlah,
+            harga_satuan
+        });
+    });
+
+    document.getElementById("items_json").value = JSON.stringify(items);
+});
+
+document.getElementById('btnCancel').addEventListener('click', function(e) {
+    e.preventDefault();
+    const noNota = document.getElementById('no_nota').value;
+
+    if (!noNota) {
+        alert('Masukkan No Nota terlebih dahulu sebelum membatalkan transaksi.');
+        return;
+    }
+
+    if (confirm('Batalkan transaksi ini? Semua data dan stok akan dikembalikan.')) {
+        window.location.href = `/transaksi/batal/${noNota}`;
+    }
+});
+
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

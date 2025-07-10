@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buku Besar</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <!-- Custom Styles -->
+    <style>
+        body {
+            background-color: #f4f7fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            margin-top: 50px;
+        }
+        .filter-container {
+            background-color: #ffffff;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .filter-container input,
+        .filter-container button,
+        .filter-container select {
+            margin-right: 10px;
+        }
+        .table th, .table td {
+            text-align: center;
+            vertical-align: middle;
+        }
+        .table thead {
+            background-color: #28a745;
+            color: white;
+        }
+        .table-hover tbody tr:hover {
+            background-color: #e9f7fe;
+        }
+        .table-striped tbody tr:nth-of-type(odd) {
+            background-color: #f1f8ff;
+        }
+        .btn-primary {
+            background-color: #28a745;
+            border-color: #28a745;
+        }
+        .btn-primary:hover {
+            background-color: #218838;
+            border-color: #1e7e34;
+        }
+        .title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .card {
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        /* Styling untuk tombol export */
+        .export-buttons {
+            margin-bottom: 20px;
+        }
+        .export-buttons .btn {
+            margin-right: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 class="title">Buku Besar: {{ akun }} (Kode Akun: {{ kode_akun }})</h1>
+
+    <div class="filter-container">
+        <form method="get" action="/laporan/buku_besar/{{ kode_akun }}">
+            <div class="row align-items-center">
+                <div class="col-auto">
+                    <label for="start" class="form-label">Tanggal Awal</label>
+                    <input type="date" class="form-control" name="start" value="{{ start }}">
+                </div>
+                <div class="col-auto">
+                    <label for="end" class="form-label">Tanggal Akhir</label>
+                    <input type="date" class="form-control" name="end" value="{{ end }}">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> Filter</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Tombol Export -->
+    <div class="export-buttons d-flex justify-content-end">
+        <a href="{{ url_for('export_buku_besar', kode_akun=kode_akun) }}?start={{ start }}&end={{ end }}" class="btn btn-success">
+            <i class="fas fa-file-excel"></i> Export to Excel
+        </a>
+        <a href="{{ url_for('export_buku_besar_pdf', kode_akun=kode_akun) }}?start={{ start }}&end={{ end }}" class="btn btn-danger">
+            <i class="fas fa-file-pdf"></i> Export to PDF
+        </a>
+    </div>
+
+    <div class="card">
+        <table class="table table-bordered table-hover table-striped">
+            <thead>
+                <tr>
+                    <th>Tanggal</th>
+                    <th>Keterangan</th>
+                    <th>Debet</th>
+                    <th>Kredit</th>
+                    <th>Saldo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in data %}
+                    <tr>
+                        <td>{{ entry.tanggal }}</td>
+                        <td>{{ entry.keterangan }}</td>
+                        <td class="text-end">{{ entry.debet | format_number }}</td>
+                        <td class="text-end">{{ entry.kredit | format_number }}</td>
+                        <td class="text-end">{{ entry.saldo | format_number }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<!-- Bootstrap JS and Popper.js -->
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js"></script>
+</body>
+</html>

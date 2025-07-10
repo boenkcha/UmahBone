@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Buku Besar</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        h1 {
+            text-align: center;
+        }
+        /* Perpendek kolom Debet, Kredit, Saldo */
+        .short-column {
+            width: 15%;
+        }
+        /* Perbesar kolom Keterangan */
+        .long-column {
+            width: 40%;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Buku Besar: {{ akun }} (Kode Akun: {{ kode_akun }})</h1>
+<p><strong>Periode: {{ start }} - {{ end }}</strong></p>
+
+<table>
+    <thead>
+        <tr>
+            <th>Tanggal</th>
+            <th>Keterangan</th>
+            <th class="short-column">Debet</th>
+            <th class="short-column">Kredit</th>
+            <th class="short-column">Saldo</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for entry in data %}
+            <tr>
+                <td>{{ entry.tanggal }}</td>
+                <td>{{ entry.keterangan }}</td>
+                <td>{{ entry.debet | format_number }}</td>
+                <td>{{ entry.kredit | format_number }}</td>
+                <td>{{ entry.saldo | format_number }}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Dashboard{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f5f5f5;
+        }
+
+        .sidebar {
+            width: 270px;
+            height: 100vh; /* fixed tinggi */
+            background: #1f1f2e;
+            color: #fff;
+            overflow-y: auto; /* ✅ scroll aktif */
+            scrollbar-width: thin;
+            scrollbar-color: #666 #1f1f2e;
+            position: fixed;
+            left: 0;
+            top: 0;
+            z-index: 1000;
+        }
+
+        /* Scrollbar khusus untuk Chrome/Edge */
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: rgba(255,255,255,0.2);
+            border-radius: 3px;
+        }
+
+        .sidebar .logo {
+            padding: 20px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            background: #2c2f3a;
+            border-bottom: 1px solid #3a3a4d;
+        }
+
+        .sidebar a {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: #ccc;
+            text-decoration: none;
+            transition: 0.3s ease;
+            font-size: 14px;
+        }
+
+        .sidebar a i {
+            margin-right: 12px;
+            font-size: 16px;
+        }
+
+        .sidebar a:hover,
+        .sidebar a.active {
+            background: #343a40;
+            color: #fff;
+        }
+
+        .content {
+            margin-left: 270px;
+            padding: 30px;
+            width: calc(100% - 270px);
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+            }
+
+            .content {
+                margin-left: 0;
+                width: 100%;
+            }
+        }
+    </style>
+
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+    <div class="logo">
+        <i class="bi bi-shop-window me-2"></i> Umah Bone
+    </div>
+
+    <a href="{{ url_for('dashboard') }}" target="_blank" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">
+        <i class="bi bi-speedometer2"></i> Dashboard
+    </a>
+
+    <a href="{{ url_for('pembelian') }}" target="_blank">
+        <i class="bi bi-box-seam"></i> Pembelian
+    </a>
+    <a href="{{ url_for('cari_pembelian') }}" target="_blank">
+        <i class="bi bi-search"></i> Cari Pembelian
+    </a>
+
+    <a href="{{ url_for('transaksi') }}" target="_blank">
+        <i class="bi bi-cash"></i> Penjualan
+    </a>
+    <a href="{{ url_for('cari_transaksi') }}" target="_blank">
+        <i class="bi bi-search"></i> Cari Penjualan
+    </a>
+
+    <a href="{{ url_for('stok') }}" target="_blank">
+        <i class="bi bi-clipboard-check"></i> Cek Stok
+    </a>
+    <a href="{{ url_for('histori_stok') }}" target="_blank">
+        <i class="bi bi-clock-history"></i> Histori Stok
+    </a>
+    <a href="{{ url_for('laporan_kartu_stok') }}" target="_blank">
+        <i class="bi bi-journal-text"></i> Kartu Stok
+    </a>
+    <a href="{{ url_for('konversi_satuan') }}" target="_blank">
+        <i class="bi bi-clipboard-check"></i> Formulasi Konversi
+    </a>
+    <a href="{{ url_for('laporan_kebutuhan') }}" target="_blank">
+        <i class="bi bi-archive"></i> Laporan Kebutuhan
+    </a>
+
+    <a href="{{ url_for('form_biaya_operasional') }}" target="_blank">
+        <i class="bi bi-gear"></i> Biaya Operasional
+    </a>
+
+    <a href="{{ url_for('pelunasan_piutang') }}" target="_blank">
+        <i class="bi bi-wallet2"></i> Pelunasan Piutang
+    </a>
+    
+    <a href="{{ url_for('neraca_rugi_laba') }}" target="_blank">
+        <i class="bi bi-bar-chart-line"></i> Rugi Laba
+    </a>
+    <a href="{{ url_for('arus_kas') }}" target="_blank">
+        <i class="bi bi-bank"></i> Arus Kas
+    </a>
+    <a href="{{ url_for('grafik_bahan') }}" target="_blank">
+        <i class="bi bi-activity"></i> Grafik Bahan
+    </a>
+    <a href="{{ url_for('laporan_stok') }}" target="_blank">
+        <i class="bi bi-box2-heart"></i> Nilai Modal
+    </a>
+
+    <!-- New Items for Jurnal and Buku Besar -->
+    <a href="{{ url_for('laporan_jurnal') }}" target="_blank">
+        <i class="bi bi-journal-text"></i> Jurnal Umum
+    </a>
+    <a href="{{ url_for('buku_besar_semua') }}" target="_blank">
+        <i class="bi bi-book"></i> Buku Besar
+    </a>
+    <a href="{{ url_for('laporan_buku_besar', kode_akun='1000') }}" target="_blank">
+        <i class="bi bi-book"></i> Buku Besar Kas
+    </a>
+    <a href="{{ url_for('laporan_buku_besar', kode_akun='1100') }}" target="_blank">
+        <i class="bi bi-book"></i> Buku Besar QRIS
+    </a>
+    <a href="{{ url_for('laporan_buku_besar', kode_akun='1200') }}" target="_blank">
+        <i class="bi bi-book"></i> Buku Besar Transfer
+    </a>
+</div>
+
+
+
+
+<!-- Konten -->
+<div class="content">
+    {% block content %}
+    <h4>Selamat datang di Sistem Keuangan <strong>Umah Bone</strong>!</h4>
+    {% endblock %}
+</div>
+
+</body>
+</html>
